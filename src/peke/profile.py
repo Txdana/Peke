@@ -48,7 +48,7 @@ def load_profile(path_or_dict: str | Path | dict[str, Any]) -> TargetProfile:
         if not file_path.exists():
             raise ProfileError(f"Target profile file not found at: '{file_path}'")
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 content = yaml.safe_load(f)
         except Exception as e:
             raise ProfileError(f"Failed to read or parse YAML file '{file_path}': {e}")
