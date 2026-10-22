@@ -1,0 +1,14 @@
+# Example Peke Target Profile
+name: "Quotes To Scrape Example"
+url: "https://quotes.toscrape.com/api/quotes?page=1"
+fetcher: "Fetcher"
+headers:
+  User-Agent: "Peke/0.1.0 Workbench"
+  Accept: "application/json"
+params:
+  page: 1
+endpoint_hints:
+  - method: "GET"
+    path: "/api/quotes"
+    source: "REA Discovered"
+schema_name: "Listing"
