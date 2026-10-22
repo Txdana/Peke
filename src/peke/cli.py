@@ -79,7 +79,7 @@ def run(
         console.print(f"[{event.timestamp}] [{event.stage}] [{color}]{event.message}[/{color}]")
 
     pipeline = Pipeline(event_callback=log_event)
-    result: PipelineResult = pipeline.run(profile_path)
+    result: PipelineResult = pipeline.run(profile_path, schema_override=schema)
 
     if result.extraction_result and result.extraction_result.json_output:
         json_out = result.extraction_result.json_output

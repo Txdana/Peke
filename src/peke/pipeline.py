@@ -77,10 +77,11 @@ class Pipeline:
                 pass
         return event
 
-    def run(self, profile_input: Any) -> PipelineResult:
+    def run(self, profile_input: Any, schema_override: str | None = None) -> PipelineResult:
         """Run the full extraction pipeline for a given profile or URL.
 
         :param profile_input: TargetProfile, path to YAML file, or dictionary.
+        :param schema_override: Optional schema name string override.
         :return: PipelineResult containing profile, fetch results, extracted data, and events.
         """
         self.events.clear()
@@ -96,6 +97,9 @@ class Pipeline:
         else:
             self._emit("DISCOVER", "INFO", "Loading target profile from file/dict...")
             profile = load_profile(profile_input)
+
+        if schema_override:
+            profile.schema_name = schema_override
 
         if profile.endpoint_hints:
             self._emit(
