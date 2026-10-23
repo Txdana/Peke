@@ -20,6 +20,7 @@ class Settings:
     def __init__(self) -> None:
         self.model_path_str: str | None = os.getenv("MODEL_PATH")
         self.rea_server_url: str | None = os.getenv("REA_SERVER_URL")
+        self.rea_command: str = os.getenv("REA_COMMAND", "rea")
 
         raw_timeout = os.getenv("FETCH_TIMEOUT", "30")
         try:
