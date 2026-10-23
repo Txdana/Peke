@@ -1,119 +1,93 @@
-"""Scrapling wrapper module for fetching target URLs in Peke."""
-
+"""Scrapling fetch adapters. Scrapling remains a normal runtime dependency."""
 import json
-from dataclasses import dataclass, field
+import logging
+import re
+import time
+from dataclasses import dataclass
 from typing import Any
 
-from scrapling import Fetcher, StealthyFetcher
+from peke.config import Settings
+from peke.profile import Profile, redact_url
+
+logger = logging.getLogger(__name__)
+MAX_RESPONSE_BYTES = 50 * 1024 * 1024
 
 
 class FetchError(Exception):
-    """Raised when fetching fails."""
-
+    """Fetching failed or returned unusable content."""
 
 
 @dataclass
 class FetchResult:
-    """Class representing the output of a fetch operation."""
-
     url: str
-    status_code: int
-    headers: dict[str, str] = field(default_factory=dict)
-    text: str = ""
-    json_data: dict[str, Any] | list | None = None
-    is_json: bool = False
-    fetcher_used: str = "Fetcher"
-    cloudflare_bypassed: bool = False
+    status: int
+    content_type: str
+    text: str
+    json: Any | None
+    elapsed_ms: float
+    bypass_detected: bool = False
+    raw_html: str | None = None
 
 
-def fetch_target(
-    url: str,
-    fetcher_type: str = "Fetcher",
-    headers: dict[str, str] | None = None,
-    params: dict[str, Any] | None = None,
-    timeout: int = 30,
-) -> FetchResult:
-    """Fetch content from the target URL using Scrapling Fetcher or StealthyFetcher.
+def _clean_html(raw: str) -> str:
+    raw = re.sub(r"(?is)<(script|style|noscript)\b[^>]*>.*?</\1\s*>", " ", raw)
+    raw = re.sub(r"(?s)<[^>]+>", " ", raw)
+    return re.sub(r"\s+", " ", raw).strip()
 
-    :param url: Target URL to fetch.
-    :param fetcher_type: "Fetcher" or "StealthyFetcher".
-    :param headers: Optional HTTP headers dictionary.
-    :param params: Optional query parameters dictionary.
-    :param timeout: Request timeout in seconds.
-    :return: FetchResult object containing response data and metadata.
-    :raises FetchError: If fetching fails.
-    """
-    headers = headers or {}
-    params = params or {}
 
+def fetch(profile: Profile, settings: Settings) -> FetchResult:
+    """Fetch one profile URL using the current Scrapling fetcher API."""
     try:
-        if fetcher_type.lower() in ("stealthyfetcher", "stealthy", "stealth"):
-            stealth_fetcher = StealthyFetcher()
-            response = stealth_fetcher.fetch(
-                url,
-                headers=headers,
-                params=params,
-                timeout=timeout * 1000 if timeout else 30000,
-            )
-            used_name = "StealthyFetcher"
-            cf_bypassed = True
+        from scrapling.fetchers import Fetcher, StealthyFetcher
+    except ImportError as exc:
+        raise FetchError("Scrapling is not installed. Install with: pip install 'scrapling[fetchers]'") from exc
+    start = time.perf_counter()
+    try:
+        if profile.fetcher == "stealthy":
+            kwargs: dict[str, Any] = {"headers": profile.headers, "timeout": int(settings.fetch_timeout * 1000)}
+            if profile.method == "POST":
+                raise FetchError("StealthyFetcher currently supports GET only in Peke Phase 1.")
+            response = StealthyFetcher.fetch(profile.url, **kwargs, **({"params": profile.params} if profile.params else {}))
         else:
-            response = Fetcher.get(
-                url,
-                headers=headers,
-                params=params,
-                timeout=timeout,
-            )
-            used_name = "Fetcher"
-            cf_bypassed = False
-
-    except Exception as e:
-        raise FetchError(f"Fetch failed for '{url}' using {fetcher_type}: {e}")
-
-    if response is None:
-        raise FetchError(f"No response returned for URL '{url}'")
-
-    status_code = getattr(response, "status", 200)
-    resp_headers = dict(getattr(response, "headers", {}) or {})
-
-    # Retrieve raw text body from response
-    body_bytes = getattr(response, "body", b"")
-    if isinstance(body_bytes, bytes) and body_bytes:
-        text_content = body_bytes.decode("utf-8", errors="ignore")
-    elif getattr(response, "text", None):
-        text_content = str(response.text)
+            fetcher = Fetcher()
+            method = profile.method.lower()
+            request = getattr(fetcher, method, None)
+            if request is None:
+                raise FetchError(f"Scrapling Fetcher does not support method {profile.method}")
+            kwargs = {"headers": profile.headers, "params": profile.params, "timeout": settings.fetch_timeout}
+            if profile.body is not None:
+                kwargs["json"] = profile.body
+            response = request(profile.url, **kwargs)
+    except FetchError:
+        raise
+    except Exception as exc:
+        logger.exception("Scrapling request failed for %s", redact_url(profile.url))
+        raise FetchError(f"Fetch failed for {redact_url(profile.url)}: {type(exc).__name__}") from exc
+    status = int(getattr(response, "status", 0) or 0)
+    headers = {str(k).lower(): str(v) for k, v in dict(getattr(response, "headers", {}) or {}).items()}
+    content_type = headers.get("content-type", "")
+    body = getattr(response, "body", b"")
+    if isinstance(body, bytes):
+        if len(body) > MAX_RESPONSE_BYTES:
+            raise FetchError(f"Response from {redact_url(profile.url)} exceeds the 50 MiB safety limit")
+        raw = body.decode("utf-8", errors="replace")
     else:
-        text_content = getattr(response, "html_content", "") or ""
-
-    is_json = False
-    json_data = None
-
-    # Check if response is clean JSON directly or via content-type / response.json()
-    content_type = str(resp_headers.get("content-type", "")).lower()
-    if ("application/json" in content_type or not content_type) and callable(
-        getattr(response, "json", None)
-    ):
+        raw = str(getattr(response, "text", "") or "")
+        if len(raw.encode("utf-8", errors="replace")) > MAX_RESPONSE_BYTES:
+            raise FetchError(f"Response from {redact_url(profile.url)} exceeds the 50 MiB safety limit")
+    if not raw.strip():
+        raise FetchError(f"Empty response body from {redact_url(profile.url)}")
+    if status < 200 or status >= 300:
+        raise FetchError(f"HTTP {status} from {redact_url(profile.url)}")
+    parsed = None
+    is_json = "json" in content_type.lower()
+    if is_json or raw.lstrip().startswith(("{", "[")):
         try:
-            json_data = response.json()
-            if json_data is not None:
-                is_json = True
-        except Exception:
-            pass
-
-    if not is_json and text_content.strip().startswith(("{", "[")):
-        try:
-            json_data = json.loads(text_content)
+            parsed = json.loads(raw)
             is_json = True
-        except Exception:
-            pass
-
-    return FetchResult(
-        url=url,
-        status_code=status_code,
-        headers=resp_headers,
-        text=text_content,
-        json_data=json_data,
-        is_json=is_json,
-        fetcher_used=used_name,
-        cloudflare_bypassed=cf_bypassed,
-    )
+        except json.JSONDecodeError:
+            is_json = False
+    challenge = bool(re.search(r"(?i)(checking your browser|verify you are human|just a moment\.\.\.|cf-challenge|challenge-platform)", raw))
+    text = raw if is_json else _clean_html(raw)
+    return FetchResult(profile.url, status, content_type, text, parsed if is_json else None,
+                       (time.perf_counter() - start) * 1000, not challenge and profile.fetcher == "stealthy", raw if not is_json else None)

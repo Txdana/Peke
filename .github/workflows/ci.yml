@@ -1,36 +1,64 @@
 name: CI
 
+permissions:
+  contents: read
+
 on:
   push:
-    branches: [ main, master ]
+    branches: [main, master]
   pull_request:
-    branches: [ main, master ]
+    branches: [main, master]
 
 jobs:
   test:
-    name: Test & Lint (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
     strategy:
       matrix:
         python-version: ["3.10", "3.11", "3.12"]
-
+    env:
+      CMAKE_ARGS: "-DGGML_CUDA=OFF"
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-
+          cache: pip
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e .[dev]
+          pip install -e ".[dev,security]"
+      - name: Ruff
+        run: ruff check .
+      - name: Type check (focused, lenient)
+        run: mypy src/peke/banner.py
+      - name: Static security analysis
+        run: bandit -q -r src/peke -ll
+      - name: Dependency vulnerability audit
+        run: pip-audit --strict --skip-editable
+      - name: Tests
+        run: pytest -q
 
-      - name: Lint with Ruff
+  gui-offscreen:
+    name: GUI tests (offscreen)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Qt system libraries
+        run: sudo apt-get update && sudo apt-get install -y libegl1 libxkbcommon0
+      - name: Install dependencies
         run: |
-          ruff check .
-
-      - name: Run Pytest
-        run: |
-          pytest -v
+          python -m pip install --upgrade pip
+          pip install -e .[gui,dev,security]
+      - name: Run GUI tests offscreen
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: pytest -v tests/gui
+      - name: Static security analysis
+        run: bandit -q -r src/peke -ll
+      - name: Dependency vulnerability audit
+        run: pip-audit --strict --skip-editable
+      - name: Lint
+        run: ruff check .

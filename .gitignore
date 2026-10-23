@@ -51,3 +51,7 @@ htmlcov/
 # Output files
 out.json
 *.output.json
+*.pem
+*.key
+models/
+output/
