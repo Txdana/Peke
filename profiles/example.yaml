@@ -1,14 +1,23 @@
-# Example Peke Target Profile
-name: "Quotes To Scrape Example"
-url: "https://quotes.toscrape.com/api/quotes?page=1"
-fetcher: "Fetcher"
+# Human-readable label shown in CLI events.
+name: Example JSONPlaceholder posts
+# Target URL; use a permitted public endpoint or your own service.
+url: https://jsonplaceholder.typicode.com/posts/1
+# 'basic' uses Scrapling's HTTP Fetcher; 'stealthy' uses its browser fetcher.
+fetcher: basic
+# Optional request headers and query parameters.
 headers:
-  User-Agent: "Peke/0.1.0 Workbench"
-  Accept: "application/json"
-params:
-  page: 1
-endpoint_hints:
-  - method: "GET"
-    path: "/api/quotes"
-    source: "REA Discovered"
-schema_name: "Listing"
+  Accept: application/json
+params: {}
+# GET or POST. For POST, body is sent as JSON when provided.
+method: GET
+body: null
+# Optional REA endpoint hints; REA is not required for Phase 1.
+endpoints: []
+# Built-in schema: Article, Product, or Listing; custom path.py:Model is supported.
+schema_name: Article
+# auto validates clean JSON directly and falls back to the LLM; api never calls the LLM.
+mode: auto
+# Page iteration is reserved for later; currently a single request is made.
+max_pages: 1
+# Optional dot-separated path to the record/list within a JSON response.
+item_path: null

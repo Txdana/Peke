@@ -1,0 +1,22 @@
+QWidget { background: @BACKGROUND; color: @TEXT; font-family: "DM Sans", "Segoe UI", sans-serif; font-size: 13px; }
+QMainWindow { background: @BACKGROUND; }
+QLabel { background: transparent; }
+QFrame#card, QGroupBox { background: @BACKGROUND; border: 1px solid @BORDER; border-radius: 12px; }
+QLineEdit, QComboBox, QPlainTextEdit, QTextBrowser, QTreeWidget { background: @WHITE; border: 1px solid @BORDER; border-radius: 9px; padding: 8px 10px; selection-background-color: @TERRACOTTA; }
+QLineEdit:focus, QComboBox:focus, QPlainTextEdit:focus, QTextBrowser:focus, QTreeWidget:focus, QPushButton:focus, QTabBar::tab:focus { border: 2px solid @TERRACOTTA; }
+QPushButton { background: @SURFACE; border: 1px solid @BORDER; border-radius: 10px; padding: 9px 13px; }
+QPushButton:hover { border-color: @TERRACOTTA; }
+QPushButton:disabled { color: @MUTED_TEXT; background: @SURFACE; }
+QPushButton#primaryButton { background: @BUTTON; color: @WHITE; border: 1px solid @BUTTON; font-weight: 700; }
+QPushButton#primaryButton:hover { background: @TERRACOTTA; }
+QPushButton#navButton { text-align: left; border: 1px solid transparent; background: transparent; padding: 11px; }
+QPushButton#navButton:checked { border: 1.5px solid @TERRACOTTA; background: rgba(200, 90, 50, 0.08); }
+QTabBar::tab { background: transparent; padding: 12px 8px; border: 0; border-bottom: 2px solid transparent; }
+QTabBar::tab:selected { font-weight: 700; border-bottom: 2px solid @TERRACOTTA; }
+QHeaderView::section { background: @SURFACE; border: 0; border-bottom: 1px solid @DIVIDER; padding: 8px; font-weight: 700; }
+QTreeWidget { padding: 4px; }
+QProgressBar { border: 0; background: @DIVIDER; border-radius: 4px; text-align: center; height: 7px; }
+QProgressBar::chunk { background: @SAGE; border-radius: 4px; }
+QScrollBar:vertical { background: transparent; width: 9px; margin: 2px; }
+QScrollBar::handle:vertical { background: @DIVIDER; min-height: 24px; border-radius: 4px; }
+QToolTip { background: @TEXT; color: @WHITE; border: 0; padding: 5px; }

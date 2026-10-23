@@ -1,183 +1,143 @@
-"""Pipeline orchestration module for Peke.
-
-Orchestrates REA discovery, Scrapling fetching, LLM extraction/validation,
-and emits structured log events during execution.
-"""
-
-from collections.abc import Callable
-from datetime import datetime
-from typing import Any
-
+"""Headless extraction pipeline."""
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+import logging
+import time
+from typing import Any, Callable, Literal
 from pydantic import BaseModel
+from peke.config import ConfigError, Settings, load_settings
+from peke.extract import ExtractionError, ExtractionResult, Extractor, validate_json
+from peke.fetch import FetchError, FetchResult, fetch
+from peke.discover import run_rea, merge_findings
+from peke.profile import Profile, redact_url
+from peke.schemas import get_schema
 
-from peke.config import get_settings
-from peke.discover import discover_target_profile
-from peke.extract import ExtractionResult, extract_data
-from peke.fetch import FetchResult, fetch_target
-from peke.profile import TargetProfile, load_profile
+logger = logging.getLogger(__name__)
+Stage = Literal["discover", "fetch", "extract", "validate", "done"]
+Level = Literal["info", "ok", "warn", "error"]
 
 
-class PipelineEvent(BaseModel):
-    """Structured log event emitted during pipeline execution."""
-
-    timestamp: str
-    stage: str
-    level: str  # "INFO", "WARNING", "ERROR", "SUCCESS"
+@dataclass
+class Event:
+    ts: str
+    stage: Stage
+    level: Level
     message: str
-    details: dict[str, Any] | None = None
+    tag: str | None = None
+    data: dict[str, Any] | None = None
 
 
-class PipelineResult(BaseModel):
-    """Data object containing the final output of a pipeline run."""
-
-    profile: TargetProfile
+@dataclass
+class PipelineResult:
+    records: list[BaseModel] = field(default_factory=list)
+    markdown_summary: str = ""
+    metrics: dict[str, Any] = field(default_factory=dict)
+    events: list[Event] = field(default_factory=list)
     fetch_result: FetchResult | None = None
     extraction_result: ExtractionResult | None = None
-    events: list[PipelineEvent] = []
+    endpoints: list[Any] = field(default_factory=list)
+
+
+def to_markdown(records: list[BaseModel], schema: type[BaseModel]) -> str:
+    if not records:
+        return f"# {schema.__name__}\n\nNo records extracted."
+    fields = list(records[0].model_dump().keys())
+    lines = [f"# {schema.__name__} extraction", "", "| " + " | ".join(fields) + " |",
+             "| " + " | ".join(["---"] * len(fields)) + " |"]
+    for record in records:
+        values = [str(record.model_dump().get(field) if record.model_dump().get(field) is not None else "").replace("|", "\\|").replace("\n", " ") for field in fields]
+        lines.append("| " + " | ".join(values) + " |")
+    return "\n".join(lines)
 
 
 class Pipeline:
-    """Orchestrates the data extraction pipeline: discover -> fetch -> extract -> validate."""
+    def __init__(self, settings: Settings | None = None, on_event: Callable[[Event], None] | None = None,
+                 extractor: Extractor | None = None, cancel_check: Callable[[], bool] | None = None, **legacy: Any) -> None:
+        self.settings = settings or load_settings()
+        self.on_event = on_event or legacy.get("event_callback")
+        self.extractor = extractor or legacy.get("extractor_override") or Extractor(self.settings)
+        self.events: list[Event] = []
+        self.cancel_check = cancel_check or (lambda: False)
 
-    def __init__(
-        self,
-        event_callback: Callable[[PipelineEvent], None] | None = None,
-        extractor_override: Any | None = None,
-    ) -> None:
-        """Initialize Pipeline.
-
-        :param event_callback: Optional callback function invoked for each emitted PipelineEvent.
-        :param extractor_override: Optional custom extractor instance (used in testing).
-        """
-        self.event_callback = event_callback
-        self.extractor_override = extractor_override
-        self.events: list[PipelineEvent] = []
-
-    def _emit(
-        self,
-        stage: str,
-        level: str,
-        message: str,
-        details: dict[str, Any] | None = None,
-    ) -> PipelineEvent:
-        """Emit a structured PipelineEvent."""
-        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        event = PipelineEvent(
-            timestamp=now_str,
-            stage=stage,
-            level=level,
-            message=message,
-            details=details,
-        )
+    def _emit(self, stage: Stage, level: Level, message: str, tag: str | None = None,
+              data: dict[str, Any] | None = None) -> None:
+        event = Event(datetime.now(timezone.utc).isoformat(), stage, level, message, tag, data)
         self.events.append(event)
-        if self.event_callback:
+        if self.on_event:
             try:
-                self.event_callback(event)
+                self.on_event(event)
             except Exception:
-                pass
-        return event
+                logger.exception("Pipeline event callback failed")
 
-    def run(self, profile_input: Any, schema_override: str | None = None) -> PipelineResult:
-        """Run the full extraction pipeline for a given profile or URL.
+    def _accept_event(self, event: Event) -> None:
+        self.events.append(event)
+        if self.on_event:
+            try:
+                self.on_event(event)
+            except Exception:
+                logger.exception("Pipeline event callback failed")
 
-        :param profile_input: TargetProfile, path to YAML file, or dictionary.
-        :param schema_override: Optional schema name string override.
-        :return: PipelineResult containing profile, fetch results, extracted data, and events.
-        """
-        self.events.clear()
-        settings = get_settings()
-
-        # 1. DISCOVERY STAGE
-        self._emit("DISCOVER", "INFO", "Initializing profile and discovery stage...")
-        if isinstance(profile_input, TargetProfile):
-            profile = profile_input
-        elif isinstance(profile_input, str) and profile_input.startswith(("http://", "https://")):
-            self._emit("DISCOVER", "INFO", f"Discovering target profile for URL: {profile_input}")
-            profile = discover_target_profile(profile_input, rea_url=settings.rea_server_url)
-        else:
-            self._emit("DISCOVER", "INFO", "Loading target profile from file/dict...")
-            profile = load_profile(profile_input)
-
-        if schema_override:
-            profile.schema_name = schema_override
-
-        if profile.endpoint_hints:
-            self._emit(
-                "DISCOVER",
-                "SUCCESS",
-                f"Loaded profile '{profile.name}' with {len(profile.endpoint_hints)} endpoint hints.",
-                details={"endpoints": profile.endpoint_hints},
-            )
-        else:
-            self._emit("DISCOVER", "INFO", f"Loaded target profile '{profile.name}'.")
-
-        # 2. FETCH STAGE
-        self._emit(
-            "FETCH",
-            "INFO",
-            f"Fetching URL '{profile.url}' using {profile.fetcher}...",
-        )
-        fetch_res: FetchResult | None = None
+    def run(self, profile: Profile) -> PipelineResult:
+        self.events = []
+        result = PipelineResult()
+        started = time.perf_counter()
+        self._emit("discover", "info", f"Using profile: {profile.name}")
         try:
-            fetch_res = fetch_target(
-                url=profile.url,
-                fetcher_type=profile.fetcher,
-                headers=profile.headers,
-                params=profile.params,
-                timeout=settings.fetch_timeout,
-            )
-
-            if fetch_res.cloudflare_bypassed:
-                self._emit("FETCH", "SUCCESS", "[CLOUDFLARE BYPASSED] Stealth fetch complete.")
-
-            self._emit(
-                "FETCH",
-                "SUCCESS",
-                f"[{fetch_res.status_code} OK] Fetched {len(fetch_res.text)} characters. JSON payload: {fetch_res.is_json}",
-                details={"status_code": fetch_res.status_code, "is_json": fetch_res.is_json},
-            )
-        except Exception as e:
-            self._emit("FETCH", "ERROR", f"Fetch failed: {e}")
-            return PipelineResult(profile=profile, fetch_result=None, extraction_result=None, events=self.events)
-
-        # 3. EXTRACTION & VALIDATION STAGE
-        self._emit("EXTRACT", "INFO", f"Processing payload with schema '{profile.schema_name}'...")
-        payload_to_extract = fetch_res.json_data if fetch_res.is_json else fetch_res.text
-
-        try:
-            extraction_res = extract_data(
-                raw_content=payload_to_extract,
-                schema_name=profile.schema_name,
-                is_json_payload=fetch_res.is_json,
-                extractor_override=self.extractor_override,
-            )
-
-            if extraction_res.used_llm:
-                self._emit(
-                    "EXTRACT",
-                    "SUCCESS",
-                    f"[VALID] LLM extraction successful using {extraction_res.model_name} "
-                    f"({extraction_res.tokens_per_second} tok/s, retries: {extraction_res.retries}).",
-                )
+            hints = run_rea(profile.url, self.settings, self._accept_event)
+            profile = merge_findings(profile, hints)
+            result.endpoints = list(profile.endpoints)
+            if self.cancel_check():
+                raise ExtractionError("Pipeline cancelled after discovery.")
+            self._emit("discover", "ok" if hints else "info",
+                       f"Endpoint hints available: {len(profile.endpoints)}",
+                       data={"endpoints": [hint.model_dump(mode="json") for hint in profile.endpoints]})
+            self._emit("fetch", "info", f"Fetching {redact_url(profile.url)}")
+            result.fetch_result = fetch(profile, self.settings)
+            fr = result.fetch_result
+            if self.cancel_check():
+                raise ExtractionError("Pipeline cancelled after fetch.")
+            self._emit("fetch", "ok", f"Fetched HTTP {fr.status}; {len(fr.text)} characters", f"{fr.status} OK")
+            schema = get_schema(profile.schema_name)
+            payload = fr.json
+            if profile.item_path and payload is not None:
+                for part in profile.item_path.split("."):
+                    payload = payload.get(part) if isinstance(payload, dict) else None
+            model = validate_json(payload, schema) if payload is not None else None
+            if model is not None:
+                result.records = [model]
+                self._emit("validate", "ok", "JSON validated directly; LLM skipped", "VALID")
+            elif profile.mode == "api":
+                raise ExtractionError("API mode requires a JSON response that validates against the selected schema")
             else:
-                self._emit(
-                    "EXTRACT",
-                    "SUCCESS",
-                    "[VALID] Direct JSON endpoint validated with Pydantic (LLM skipped).",
-                )
-
-            return PipelineResult(
-                profile=profile,
-                fetch_result=fetch_res,
-                extraction_result=extraction_res,
-                events=self.events,
-            )
-
-        except Exception as e:
-            self._emit("EXTRACT", "ERROR", f"Extraction / Validation failed: {e}")
-            return PipelineResult(
-                profile=profile,
-                fetch_result=fetch_res,
-                extraction_result=None,
-                events=self.events,
-            )
+                if self.cancel_check():
+                    raise ExtractionError("Pipeline cancelled before extraction.")
+                self._emit("extract", "info", "Deterministic parsing did not match; using local LLM")
+                extracted = self.extractor.run(fr.text, schema)
+                result.extraction_result = extracted
+                result.records = [extracted.model]
+                self._emit("validate", "ok", "LLM output validated", "VALID")
+            result.markdown_summary = to_markdown(result.records, schema) + f"\n\n## Run summary\n\n- Valid records: {len(result.records)}\n- Fetch time: {fr.elapsed_ms} ms\n"
+            if result.extraction_result is not None:
+                er = result.extraction_result
+                result.metrics.update({"model_name": er.model_name, "temperature": self.settings.temperature,
+                                       "prompt_tokens": er.prompt_tokens,
+                                       "completion_tokens": er.completion_tokens,
+                                       "tokens_per_second": er.tokens_per_second,
+                                       "retries": max(0, er.attempts - 1)})
+            else:
+                result.metrics.update({"model_name": "no model (direct validation)",
+                                       "temperature": self.settings.temperature, "prompt_tokens": 0,
+                                       "completion_tokens": 0, "tokens_per_second": 0, "retries": 0})
+            result.metrics.update({"fetch_ms": result.fetch_result.elapsed_ms if result.fetch_result else 0,
+                                   "records_valid": len(result.records), "records_invalid": 0,
+                                   "n_ctx": self.settings.n_ctx, "n_gpu_layers": self.settings.n_gpu_layers,
+                                   "model_size_bytes": self.settings.model_path.stat().st_size if self.settings.model_path and self.settings.model_path.is_file() else 0})
+        except (ConfigError, FetchError, ExtractionError, ValueError) as exc:
+            logger.warning("Pipeline ended with partial result: %s", exc)
+            self._emit("fetch" if isinstance(exc, FetchError) else "extract", "error", str(exc))
+        finally:
+            result.events = list(self.events)
+            result.metrics.update({"elapsed_ms": round((time.perf_counter() - started) * 1000, 2), "records": len(result.records)})
+            self._emit("done", "ok" if result.records else "warn", "Pipeline finished" if result.records else "Pipeline finished with no records")
+            result.events = list(self.events)
+        return result
