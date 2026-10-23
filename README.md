@@ -1,51 +1,94 @@
-# Peke 🐥
+# Peke
 
-An open-source desktop workbench that orchestrates three powerful tools into one data-extraction pipeline:
-1. **REA** (optional component): Reverse engineering of web applications to discover hidden endpoints, headers, and parameters.
-2. **Scrapling**: Stealth web fetching and HTTP parsing engine.
-3. **llama.cpp** (via `llama-cpp-python`): In-process local LLM that transforms raw, unformatted payload text into schema-valid JSON or Markdown.
+> Open-source desktop workbench that chains **REA**, **Scrapling**, and **llama.cpp** into a unified, privacy-first data-extraction pipeline.
 
----
-
-## 🚀 Quickstart
-
-Run Peke in 3 simple commands:
-
-```bash
-# 1. Install Peke
-pip install -e .
-
-# 2. Set your local GGUF model path
-export MODEL_PATH="/path/to/your/model.gguf"
-
-# 3. Execute extraction pipeline via CLI
-peke run profiles/example.yaml -o out.json
+```
+┌──────────────────────────────────────────────────────┐
+│  PEKE  [MCP Active]                local: llama.cpp  │
+└──────────────────────────────────────────────────────┘
+  │
+  ├── [01] REA Analysis  ──▶  Discovered Endpoint
+  ├── [02] Scrapling     ──▶  Cloudflare Bypassed
+  └── [03] Local SLM     ──▶  Clean JSON Formatted
 ```
 
-To launch the desktop interface:
+## Quickstart
+
+### 3-Command Installation
 ```bash
+pipx install 'peke[gui]'
+peke doctor
 peke
 ```
 
----
+## Pipeline Overview
 
-## 🖼 Screenshots
+```
+ [ Target Web App ]
+         │
+         ▼
+ ┌───────────────┐
+ │  1. REA MCP   │  ──▶ Reverse-engineers hidden endpoints & headers (Optional)
+ └───────┬───────┘
+         │ (Profile YAML)
+         ▼
+ ┌───────────────┐
+ │ 2. Scrapling  │  ──▶ Stealth fetching & Cloudflare bypass
+ └───────┬───────┘
+         │ (HTML / JSON Payload)
+         ▼
+ ┌───────────────┐
+ │ 3. llama.cpp  │  ──▶ In-process GGUF LLM turns raw payloads into Pydantic JSON
+ └───────────────┘
+```
 
-*(Desktop Workbench interface screenshots coming soon)*
+## Requirements
+- Python 3.10+
+- PySide6 (for GUI)
+- Local GGUF quantized model (set via `MODEL_PATH`)
 
----
+## Configuration Table
 
-## 📜 Responsible Use
+| Environment Variable | Description | Default |
+|----------------------|-------------|---------|
+| `MODEL_PATH` | Path to local GGUF llama.cpp model file | Required for LLM fallback |
+| `LLM_TEMPERATURE` | Temperature setting for LLM inference (clamped 0.0 - 0.1) | `0.0` |
+| `REA_SERVER_URL` | Endpoint URL for REA MCP server | `http://localhost:8000` |
 
-Peke is designed for authorized data extraction, API discovery, and local data processing. When using Peke, please ensure you adhere to responsible web scraping practices:
+## Documentation
 
-- **Respect `robots.txt`**: Always check and respect `robots.txt` rules and crawl directives for target domains.
-- **Site Terms of Service**: Verify that your scraping activity complies with the target website's Terms of Service and API usage guidelines.
-- **Rate Limits & Load**: Limit request frequency and enforce reasonable delays between requests to avoid overloading origin servers.
-- **Permitted Data Only**: Collect only data you are permitted to access. Avoid gathering private, personal, sensitive, or protected intellectual property without permission.
+- [REA Workflow](docs/rea-workflow.md) - Transitioning REA findings into target profiles
+- [Target Profiles Reference](docs/profiles.md) - Full YAML profile field specification
+- [Custom Schemas](docs/schemas.md) - Defining and registering Pydantic schemas
+- [Model Selection](docs/models.md) - Choosing GGUF models and RAM/VRAM planning
+- [Architecture](docs/architecture.md) - Core system design and component interaction
 
----
+## FAQ & Troubleshooting
 
-## 📄 License
+### llama-cpp-python Build Issues
+If `llama-cpp-python` fails to compile during installation, ensure C/C++ compiler tools (`gcc`, `g++`, `cmake`) are installed. For CUDA GPU acceleration:
+```bash
+CMAKE_ARGS="-DLLAMA_CUDA=on" pip install llama-cpp-python
+```
 
-This project is released under the [MIT License](LICENSE).
+### Scrapling Browser Installation
+If `StealthyFetcher` requires browser engines:
+```bash
+scrapling install
+```
+
+## Responsible Use & Ethics
+
+Peke is designed for authorized data collection, web analysis, and software integration. Users are strictly expected to:
+- Respect target website `robots.txt` rules and Terms of Service (ToS).
+- Observe request rate limits and prevent denial-of-service conditions.
+- Collect data only with proper authorization.
+- Never circumvent access controls for data you are not permitted to access.
+
+## Roadmap
+- Multi-target profile batch processing
+- Automated schema generation from sample payloads
+- Dynamic profile exports to Python code snippets
+
+## License
+[MIT License](LICENSE)

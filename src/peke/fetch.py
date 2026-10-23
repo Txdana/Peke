@@ -6,10 +6,32 @@ from typing import Any
 
 from scrapling import Fetcher, StealthyFetcher
 
+SENSITIVE_HEADER_KEYS = {
+    "authorization",
+    "cookie",
+    "set-cookie",
+    "x-api-key",
+    "api-key",
+    "secret",
+    "token",
+    "access-token",
+    "bearer",
+}
+
+
+def sanitize_headers(headers: dict[str, str]) -> dict[str, str]:
+    """Return a copy of headers with sensitive values redacted for safe logging."""
+    sanitized = {}
+    for key, value in headers.items():
+        if key.lower() in SENSITIVE_HEADER_KEYS:
+            sanitized[key] = "[REDACTED]"
+        else:
+            sanitized[key] = value
+    return sanitized
+
 
 class FetchError(Exception):
     """Raised when fetching fails."""
-
 
 
 @dataclass
@@ -43,7 +65,7 @@ def fetch_target(
     :return: FetchResult object containing response data and metadata.
     :raises FetchError: If fetching fails.
     """
-    headers = headers or {}
+    raw_headers = headers or {}
     params = params or {}
 
     try:
@@ -51,7 +73,7 @@ def fetch_target(
             stealth_fetcher = StealthyFetcher()
             response = stealth_fetcher.fetch(
                 url,
-                headers=headers,
+                headers=raw_headers,
                 params=params,
                 timeout=timeout * 1000 if timeout else 30000,
             )
@@ -60,7 +82,7 @@ def fetch_target(
         else:
             response = Fetcher.get(
                 url,
-                headers=headers,
+                headers=raw_headers,
                 params=params,
                 timeout=timeout,
             )
@@ -75,6 +97,7 @@ def fetch_target(
 
     status_code = getattr(response, "status", 200)
     resp_headers = dict(getattr(response, "headers", {}) or {})
+    sanitized_resp_headers = sanitize_headers(resp_headers)
 
     # Retrieve raw text body from response
     body_bytes = getattr(response, "body", b"")
@@ -110,7 +133,7 @@ def fetch_target(
     return FetchResult(
         url=url,
         status_code=status_code,
-        headers=resp_headers,
+        headers=sanitized_resp_headers,
         text=text_content,
         json_data=json_data,
         is_json=is_json,

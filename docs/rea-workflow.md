@@ -1,74 +1,61 @@
-# REA to Peke Target Profile Workflow
+# REA Workflow: From Discovery to Profile
 
-This document explains how to take findings from **REA** (Reverse Engineering of Web Apps) and convert them into a Peke Target Profile (`.yaml`).
+This guide demonstrates how REA (Reverse Engineering Assistant) discovery findings are converted into a Peke Target Profile YAML using a fictional demo target (`https://api.democorp-example.internal/products`).
 
----
+## Step 1: Run REA Discovery
 
-## 🔍 Overview
+Using the Peke CLI, initiate endpoint discovery against the target URL:
 
-> **Important Note:** REA findings are automated hints and suggestions. They must be reviewed and verified by a human operator before being used in production extraction profiles.
+```bash
+peke discover https://api.democorp-example.internal/products -o profiles/demo_products.yaml
+```
 
-**REA** reverse engineers web applications to discover:
-1. Hidden API endpoints (e.g. `/api/v2/products`, `/graphql`).
-2. Required HTTP headers (e.g., custom authorization tokens, `X-Api-Key`, `User-Agent`).
-3. Query parameters or POST payloads.
+If REA is reachable at `REA_SERVER_URL`, Peke queries REA for candidate endpoints, required request headers, and parameter parameters.
 
-**Peke** takes those findings and orchestrates fetching via **Scrapling** and extraction via local **llama.cpp** into clean, schema-valid JSON.
+## Step 2: Review Generated Findings
 
----
-
-## 🛠 Step-by-Step Transition Guide
-
-### Step 1: Discover Endpoints with REA
-Run REA analysis against your target application. REA will produce an inspection report containing identified API routes:
+REA saves raw inspection hints to `profiles/demo_products.json`:
 
 ```json
 {
-  "target_url": "https://example.com/shop",
-  "endpoints": [
-    {"method": "GET", "path": "/api/v1/products/list", "size": "12.4KB"},
-    {"method": "POST", "path": "/api/v1/cart/checkout", "size": "2.1KB"}
+  "target_url": "https://api.democorp-example.internal/products",
+  "endpoint_hints": [
+    "https://api.democorp-example.internal/v2/items?category=electronics"
   ],
   "headers": {
-    "X-Requested-With": "XMLHttpRequest",
-    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64)"
-  }
+    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64)",
+    "X-Client-App": "DemoCorpWeb"
+  },
+  "params": {
+    "category": "electronics",
+    "limit": "50"
+  },
+  "schema_name": "Product",
+  "note": "REA findings are hints that must be reviewed before use."
 }
 ```
 
-### Step 2: Create a Peke Target Profile (`.yaml`)
-Translate the findings into a YAML profile under `profiles/`:
+## Step 3: Refine Draft Profile YAML
+
+Review and clean the draft YAML file (`profiles/demo_products.yaml`):
 
 ```yaml
-# profiles/my_target.yaml
-name: "E-Commerce Product API"
-url: "https://example.com/api/v1/products/list"
-fetcher: "StealthyFetcher"  # Use StealthyFetcher if Cloudflare/bot protection is present
-
+target_url: https://api.democorp-example.internal/v2/items
+fetcher_type: StealthyFetcher
 headers:
-  X-Requested-With: "XMLHttpRequest"
-  User-Agent: "Mozilla/5.0 (X11; Linux x86_64)"
-
+  User-Agent: Mozilla/5.0 (X11; Linux x86_64)
+  X-Client-App: DemoCorpWeb
 params:
-  category: "electronics"
-  limit: 20
-
-endpoint_hints:
-  - method: "GET"
-    path: "/api/v1/products/list"
-    source: "REA Discovered"
-
-schema_name: "Product"
+  category: electronics
+  limit: 50
+schema_name: Product
+use_llm_fallback: true
 ```
 
-### Step 3: Run Peke Extraction
-Execute Peke using the newly created profile:
+## Step 4: Run Extraction Pipeline
+
+Execute the pipeline with the finalized profile:
 
 ```bash
-peke run profiles/my_target.yaml -o output.json
+peke run profiles/demo_products.yaml -o output.json
 ```
-
-Peke will:
-1. Fetch the target data using Scrapling (`Fetcher` or `StealthyFetcher`).
-2. Validate direct JSON if clean API endpoints are used.
-3. Use local llama.cpp to structure raw payloads into schema-valid JSON if required.
