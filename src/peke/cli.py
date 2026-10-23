@@ -7,7 +7,7 @@ import typer
 from rich.console import Console
 
 from peke.config import get_settings
-from peke.discover import discover_target_profile, is_rea_available
+from peke.discover import is_rea_available
 from peke.pipeline import Pipeline, PipelineEvent, PipelineResult
 
 app = typer.Typer(name="peke", help="Peke: Open-source data-extraction workbench", invoke_without_command=True)
@@ -49,55 +49,6 @@ def main(
                 "[bold yellow]GUI dependencies (PySide6) are not installed or GUI is unavailable.[/bold yellow]"
             )
             console.print("Use [bold cyan]peke run profiles/example.yaml -o out.json[/bold cyan] for headless CLI mode.")
-
-
-@app.command()
-def discover(
-    url: str = typer.Argument(..., help="Target web application URL to inspect"),
-    out: Path | None = typer.Option(
-        None, "--out", "-o", help="Path to write the draft profile YAML file"
-    ),
-    schema: str = typer.Option("Article", "--schema", "-s", help="Target Pydantic schema model"),
-) -> None:
-    """Discover endpoints using REA and generate findings file and draft target profile YAML."""
-    settings = get_settings()
-    mcp_status = is_rea_available(settings.rea_server_url)
-    print_startup_splash(mcp_active=mcp_status)
-
-    console.print(f"[bold blue]Running discovery for target URL:[/bold blue] {url}")
-
-    events: list[tuple[str, str]] = []
-    def on_event(level: str, msg: str) -> None:
-        events.append((level, msg))
-        color = "yellow" if level == "WARNING" else "cyan"
-        console.print(f"[{color}]{level}: {msg}[/{color}]")
-
-    profile = discover_target_profile(url, rea_url=settings.rea_server_url, schema_name=schema, on_event=on_event)
-
-    findings_payload = {
-        "target_url": url,
-        "endpoint_hints": profile.endpoint_hints,
-        "headers": profile.headers,
-        "params": profile.params,
-        "schema_name": profile.schema_name,
-        "note": "REA findings are hints that must be reviewed before use.",
-    }
-
-    if out:
-        out.parent.mkdir(parents=True, exist_ok=True)
-        import yaml
-        with open(out, "w", encoding="utf-8") as f:
-            yaml.safe_dump(profile.model_dump(), f, sort_keys=False)
-
-        findings_file = out.with_suffix(".json")
-        with open(findings_file, "w", encoding="utf-8") as f:
-            json.dump(findings_payload, f, indent=2)
-
-        console.print(f"\n[bold green]Success![/bold green] Saved draft profile to '{out}' and findings to '{findings_file}'.")
-    else:
-        console.print("\n[bold green]Discovered Profile YAML:[/bold green]")
-        import yaml
-        console.print(yaml.safe_dump(profile.model_dump(), sort_keys=False))
 
 
 @app.command()

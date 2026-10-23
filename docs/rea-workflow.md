@@ -6,8 +6,6 @@ This document explains how to take findings from **REA** (Reverse Engineering of
 
 ## 🔍 Overview
 
-> **Important Note:** REA findings are automated hints and suggestions. They must be reviewed and verified by a human operator before being used in production extraction profiles.
-
 **REA** reverse engineers web applications to discover:
 1. Hidden API endpoints (e.g. `/api/v2/products`, `/graphql`).
 2. Required HTTP headers (e.g., custom authorization tokens, `X-Api-Key`, `User-Agent`).
