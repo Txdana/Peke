@@ -13,7 +13,10 @@ import copy
 import logging
 import pathlib
 
-import tomllib
+try:
+    import tomllib
+except ImportError:
+    import tomli as tomllib
 
 __all__ = ['Config', 'UNSET', 'SchemaIssue', 'set_global_cfg', 'get_global_cfg']
 

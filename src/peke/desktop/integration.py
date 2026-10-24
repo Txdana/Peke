@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 def is_desktop_installed() -> bool:
-    if sys.platform.startswith("linux"):
+    if sys.platform.startswith("linux") or sys.platform == "darwin":
         return paths.get_desktop_entry_path().is_file()
     elif sys.platform == "win32":
         return paths.get_windows_start_menu_path().is_file()
@@ -38,7 +38,7 @@ def install_desktop_integration() -> dict[str, str]:
 
     peke_bin = shutil.which("peke") or f"{sys.executable} -m peke"
 
-    if sys.platform.startswith("linux"):
+    if sys.platform.startswith("linux") or sys.platform == "darwin":
         entry_path = paths.get_desktop_entry_path()
         entry_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -70,7 +70,7 @@ StartupWMClass=peke
 def uninstall_desktop_integration() -> list[str]:
     """Remove desktop shortcuts, icon files, and OS application registrations."""
     removed = []
-    if sys.platform.startswith("linux"):
+    if sys.platform.startswith("linux") or sys.platform == "darwin":
         entry_path = paths.get_desktop_entry_path()
         if entry_path.is_file():
             entry_path.unlink(missing_ok=True)
