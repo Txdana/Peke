@@ -50,7 +50,10 @@ def run_gui(no_splash: bool = False) -> int:
     app = QApplication.instance() or QApplication(sys.argv)
     app.setApplicationName("Peke")
     app.setOrganizationName("Peke")
-    app.setWindowIcon(QIcon(str(Path(__file__).parent / "assets" / "peke.svg")))
+    icon_png = Path(__file__).parent / "assets" / "peke.png"
+    icon_svg = Path(__file__).parent / "assets" / "peke.svg"
+    icon_path = icon_png if icon_png.is_file() else icon_svg
+    app.setWindowIcon(QIcon(str(icon_path)))
     register_fonts()
     app.setFont(QFont("DM Sans", 10))
     app.setStyleSheet(load_stylesheet())
