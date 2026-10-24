@@ -1,5 +1,6 @@
 """Offscreen tests for the optional desktop shell."""
 import os
+
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
@@ -24,7 +25,7 @@ def test_window_constructs(qtbot):
     qtbot.addWidget(window)
     window.show()
     assert window.minimumWidth() == 1100
-    assert window.workspace.count() == 4
+    assert window.workspace.count() == 5
 
 
 def test_sidebar_collapse_toggles(qtbot):
@@ -78,7 +79,9 @@ def test_run_button_disables_and_reenables(qtbot, monkeypatch):
             time.sleep(0.1)
             return FakeResult()
 
+    from pathlib import Path
     monkeypatch.setattr(worker_module, "Pipeline", FakePipeline)
+    monkeypatch.setattr("peke.gui.main_window.load_settings", lambda: type("Settings", (), {"request_delay_seconds": 0.0, "model_path": Path("/fake/model.gguf")})())
     window = MainWindow()
     qtbot.addWidget(window)
     window.show()

@@ -110,6 +110,7 @@ def test_fetch_rejects_oversized_response(monkeypatch):
     import sys
     import types
     from unittest.mock import MagicMock
+
     import peke.fetch as fetch_module
 
     monkeypatch.setattr(fetch_module, "MAX_RESPONSE_BYTES", 4)

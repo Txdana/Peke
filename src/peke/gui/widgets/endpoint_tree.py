@@ -1,8 +1,16 @@
 """Live, host/path-grouped endpoint hint tree."""
 from urllib.parse import urlparse
+
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QDialog, QHBoxLayout, QLabel, QPushButton, QTreeWidget, QTreeWidgetItem, QVBoxLayout
-from peke.gui import theme
+from PySide6.QtWidgets import (
+    QDialog,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QTreeWidget,
+    QTreeWidgetItem,
+    QVBoxLayout,
+)
 
 
 class EndpointTree(QTreeWidget):

@@ -1,8 +1,9 @@
 """Main three-pane Peke workbench window."""
 import time
 
-from PySide6.QtCore import QSettings, QThread, Qt
+from PySide6.QtCore import QSettings, Qt, QThread
 from PySide6.QtWidgets import QHBoxLayout, QMainWindow, QMessageBox, QSplitter, QToolBar, QWidget
+
 from peke.config import load_settings
 from peke.extract import Extractor
 from peke.gui.panes.output_panel import OutputPanel
@@ -21,12 +22,12 @@ class MainWindow(QMainWindow):
         self.output_toggle = toolbar.addAction("Show / hide output panel")
         self.output_toggle.setCheckable(True)
         self.output_toggle.setChecked(True)
-        self.output_toggle.setAccessibleName("Toggle output panel")
+        self.output_toggle.setToolTip("Toggle output panel")
         self.output_toggle.toggled.connect(self._toggle_output_panel)
         self.splash_toggle = toolbar.addAction("Startup splash")
         self.splash_toggle.setCheckable(True)
         self.splash_toggle.setChecked(self.settings_value("show_splash", True))
-        self.splash_toggle.setAccessibleName("Enable startup splash")
+        self.splash_toggle.setToolTip("Enable startup splash")
         self.splash_toggle.toggled.connect(lambda enabled: self._save_setting("show_splash", enabled))
         about_action = toolbar.addAction("About Peke")
         about_action.triggered.connect(self._show_about)
@@ -94,9 +95,11 @@ class MainWindow(QMainWindow):
         for idx, button in enumerate(self.sidebar.buttons):
             button.setChecked(idx == index)
             if self.sidebar.collapsed:
-                from peke.gui.widgets.icons import svg_icon
                 from peke.gui import theme
-                button.setIcon(svg_icon(["target", "scraper", "model", "schema"][idx], theme.TERRACOTTA if idx == index else theme.MUTED_TEXT))
+                from peke.gui.widgets.icons import svg_icon
+                icons = ["target", "scraper", "model", "schema", "target"]
+                icon_name = icons[idx] if idx < len(icons) else "target"
+                button.setIcon(svg_icon(icon_name, theme.TERRACOTTA if idx == index else theme.MUTED_TEXT))
 
     def start_pipeline(self, url: str, fetcher: str) -> None:
         from urllib.parse import urlparse

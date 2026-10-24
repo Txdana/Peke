@@ -4,8 +4,10 @@ import logging
 import time
 from dataclasses import dataclass
 from typing import Any
+
 from pydantic import BaseModel, ValidationError
-from peke.config import ConfigError, Settings
+
+from peke.config import Settings
 
 logger = logging.getLogger(__name__)
 

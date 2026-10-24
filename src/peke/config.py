@@ -73,6 +73,18 @@ class Settings:
     rea_command: str | None = None
     rea_cdp_endpoint: str = "http://127.0.0.1:9222"
     fetch_timeout: float = 30.0
+    # MCP settings
+    mcp_read_only: bool = False
+    mcp_disabled_tools: tuple[str, ...] = ()
+    mcp_allow_stealth: bool = True
+    mcp_allow_private_hosts: bool = False
+    mcp_allowed_domains: tuple[str, ...] = ()
+    mcp_blocked_domains: tuple[str, ...] = ()
+    mcp_robots_policy: str = "warn"
+    mcp_max_inline_chars: int = 20000
+    mcp_max_fetch_bytes: int = 5_242_880
+    mcp_max_pages_per_call: int = 5
+    mcp_http_port: int = 8765
 
     def __post_init__(self) -> None:
         """Reject unsafe or nonsensical resource settings before work starts."""
@@ -92,6 +104,16 @@ class Settings:
             raise ConfigError("REQUEST_DELAY_SECONDS must be between 0 and 3600")
         if not math.isfinite(self.fetch_timeout) or not 0.1 <= self.fetch_timeout <= 300.0:
             raise ConfigError("FETCH_TIMEOUT must be between 0.1 and 300 seconds")
+        if self.mcp_robots_policy not in {"off", "warn", "respect"}:
+            raise ConfigError("MCP_ROBOTS_POLICY must be off, warn, or respect")
+        if self.mcp_max_inline_chars < 100 or self.mcp_max_inline_chars > 1_000_000:
+            raise ConfigError("MCP_MAX_INLINE_CHARS must be between 100 and 1000000")
+        if self.mcp_max_fetch_bytes < 1024 or self.mcp_max_fetch_bytes > 100_000_000:
+            raise ConfigError("MCP_MAX_FETCH_BYTES must be between 1024 and 100000000")
+        if self.mcp_max_pages_per_call < 1 or self.mcp_max_pages_per_call > 100:
+            raise ConfigError("MCP_MAX_PAGES_PER_CALL must be between 1 and 100")
+        if self.mcp_http_port < 1024 or self.mcp_http_port > 65535:
+            raise ConfigError("MCP_HTTP_PORT must be between 1024 and 65535")
 
     def require_model(self) -> Path:
         """Return an existing model path or explain how to configure one."""
@@ -133,6 +155,24 @@ def load_settings() -> Settings:
         except ValueError as exc:
             raise ConfigError(f"{key} must be a number") from exc
 
+    def boolean(key: str, default: bool) -> bool:
+        raw = value(key, default)
+        if isinstance(raw, bool):
+            return raw
+        return str(raw).lower() in {"1", "true", "yes", "on"}
+
+    def string_list(key: str, default: tuple[str, ...]) -> tuple[str, ...]:
+        raw = config_values.get(key)
+        if raw is None:
+            raw = os.getenv(key)
+        if raw is None:
+            return default
+        if isinstance(raw, (list, tuple)):
+            return tuple(str(x).strip() for x in raw if str(x).strip())
+        if isinstance(raw, str):
+            return tuple(x.strip() for x in raw.split(",") if x.strip())
+        return default
+
     model = value("MODEL_PATH", "").strip()
     temperature = number("TEMPERATURE", 0.1)
     if not math.isfinite(temperature):
@@ -148,6 +188,17 @@ def load_settings() -> Settings:
         rea_command=value("REA_COMMAND", "").strip() or None,
         rea_cdp_endpoint=value("REA_CDP_ENDPOINT", "http://127.0.0.1:9222").strip(),
         fetch_timeout=number("FETCH_TIMEOUT", 30.0),
+        mcp_read_only=boolean("MCP_READ_ONLY", False),
+        mcp_disabled_tools=string_list("MCP_DISABLED_TOOLS", ()),
+        mcp_allow_stealth=boolean("MCP_ALLOW_STEALTH", True),
+        mcp_allow_private_hosts=boolean("MCP_ALLOW_PRIVATE_HOSTS", False),
+        mcp_allowed_domains=string_list("MCP_ALLOWED_DOMAINS", ()),
+        mcp_blocked_domains=string_list("MCP_BLOCKED_DOMAINS", ()),
+        mcp_robots_policy=value("MCP_ROBOTS_POLICY", "warn").strip().lower(),
+        mcp_max_inline_chars=integer("MCP_MAX_INLINE_CHARS", 20000),
+        mcp_max_fetch_bytes=integer("MCP_MAX_FETCH_BYTES", 5_242_880),
+        mcp_max_pages_per_call=integer("MCP_MAX_PAGES_PER_CALL", 5),
+        mcp_http_port=integer("MCP_HTTP_PORT", 8765),
     )
 
 

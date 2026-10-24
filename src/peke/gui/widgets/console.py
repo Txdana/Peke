@@ -2,8 +2,18 @@
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+
 from PySide6.QtGui import QColor, QTextCharFormat, QTextCursor
-from PySide6.QtWidgets import QComboBox, QFileDialog, QFrame, QHBoxLayout, QPlainTextEdit, QPushButton, QVBoxLayout
+from PySide6.QtWidgets import (
+    QComboBox,
+    QFileDialog,
+    QFrame,
+    QHBoxLayout,
+    QPlainTextEdit,
+    QPushButton,
+    QVBoxLayout,
+)
+
 from peke.gui import theme
 
 

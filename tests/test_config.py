@@ -1,4 +1,5 @@
 import pytest
+
 from peke.config import ConfigError, Settings, load_settings
 
 

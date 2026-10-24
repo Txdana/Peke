@@ -11,13 +11,15 @@ import hashlib
 import re
 import sys
 import tarfile
-import tomllib
 from email.parser import Parser
 from pathlib import Path
+from typing import NoReturn
 from zipfile import ZipFile
 
+import tomllib
 
-def fail(message: str) -> "NoReturn":
+
+def fail(message: str) -> NoReturn:
     print(f"ERROR: {message}", file=sys.stderr)
     raise SystemExit(1)
 

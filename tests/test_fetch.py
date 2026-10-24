@@ -1,7 +1,9 @@
-from unittest.mock import MagicMock
 import sys
 import types
+from unittest.mock import MagicMock
+
 import pytest
+
 from peke.config import Settings
 from peke.fetch import FetchError, fetch
 from peke.profile import load_profile

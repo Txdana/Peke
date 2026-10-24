@@ -1,7 +1,7 @@
 """Small, keyboard-dismissable startup splash screen."""
 from __future__ import annotations
 
-from PySide6.QtCore import QSettings, QTimer, Qt, Signal
+from PySide6.QtCore import QSettings, Qt, QTimer, Signal
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 

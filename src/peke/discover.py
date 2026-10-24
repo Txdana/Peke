@@ -9,8 +9,9 @@ import json
 import logging
 import shlex
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 from urllib.parse import urlparse, urlsplit, urlunsplit
 
 import yaml
@@ -213,6 +214,7 @@ def run_rea(target_url: str, settings: Settings, on_event: Callable[[Any], None]
     def emit(message: str, level: str = "warn") -> None:
         if on_event:
             from datetime import datetime, timezone
+
             from peke.pipeline import Event
             on_event(Event(datetime.now(timezone.utc).isoformat(), "discover", level, message, "REA"))
 

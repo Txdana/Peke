@@ -1,4 +1,5 @@
 import pytest
+
 from peke.profile import ProfileError, load_profile
 
 

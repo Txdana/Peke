@@ -1,7 +1,9 @@
 """Optional GPU/CPU memory telemetry card; telemetry failures are harmless."""
 import importlib.util
+
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QFrame, QLabel, QProgressBar, QVBoxLayout
+
 from peke.gui import theme
 
 

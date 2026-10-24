@@ -12,6 +12,7 @@ def test_gui_assets_are_present_in_source_tree() -> None:
 
 def test_doctor_reports_readiness_without_a_model() -> None:
     from typer.testing import CliRunner
+
     from peke.cli import app
 
     result = CliRunner().invoke(app, ["doctor"])
