@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [switch]$DryRun,
     [switch]$NoLaunch,
@@ -11,7 +11,7 @@ $ErrorActionPreference = 'Stop'
 
 $Repo = 'https://github.com/Txdana/Peke.git'
 # Pin to the reviewed source commit. Never replace this with "main" or a tag.
-$PinnedCommit = 'e8598a15161e68e94b6212fffc8be608da545865'
+$PinnedCommit = '8e29286d7b99802718d59e3670906e11f9b0cc97'
 $AppName = 'Peke'
 # Keep the build root short: PySide6 ships deeply nested Qt/QML files that can
 # exceed legacy Windows path limits when built below the default TEMP directory.
