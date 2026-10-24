@@ -4,6 +4,7 @@ from pathlib import Path
 def test_gui_assets_are_present_in_source_tree() -> None:
     root = Path(__file__).resolve().parents[1]
     assert (root / "src/peke/gui/theme.qss").is_file()
+    assert (root / "src/peke/gui/assets/peke.png").is_file()
     assert (root / "src/peke/gui/assets/peke.svg").is_file()
     pyproject = (root / "pyproject.toml").read_text(encoding="utf-8")
     assert '"src/peke/gui/assets/*.svg"' in pyproject
