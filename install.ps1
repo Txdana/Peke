@@ -11,7 +11,7 @@ $ErrorActionPreference = "Stop"
 # Release maintainers MUST replace this with the full 40-character commit SHA
 # of the source revision that contains this installer before publishing.
 $Repo = "https://github.com/Txdana/Peke.git"
-$PinnedCommit = "REPLACE_WITH_FULL_40_CHARACTER_COMMIT_SHA"
+$PinnedCommit = "8575e2fc6b4d8aa9e1647e5d523373170012aeae"
 $AppName = "Peke"
 $WorkRoot = Join-Path ([IO.Path]::GetTempPath()) ("peke-source-build-" + [guid]::NewGuid().ToString("N"))
 
