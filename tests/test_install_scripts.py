@@ -5,7 +5,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_install_scripts_verify_release_artifact_before_install() -> None:
+def test_install_scripts_verify_source_revision_and_build_locally() -> None:
     shell = (ROOT / "install.sh").read_text(encoding="utf-8")
     powershell = (ROOT / "install.ps1").read_text(encoding="utf-8")
     assert "set -eu" in shell
@@ -18,13 +18,14 @@ def test_install_scripts_verify_release_artifact_before_install() -> None:
     assert "pipx runpip peke install --require-hashes -r" in shell
     assert "Set-StrictMode" in powershell
     assert "$DryRun" in powershell
-    assert "$Uninstall" in powershell
-    assert "$FromSource" in powershell
-    assert "pipx install --force --editable '.[gui]'" in powershell
-    assert "SHA256SUMS" in powershell
-    assert "requirements-hashed.txt" in powershell
-    assert "Get-FileHash -Algorithm SHA256" in powershell
-    assert "--require-hashes -r $requirementsPath" in powershell
+    assert "$PinnedCommit" in powershell
+    assert "rev-parse HEAD" in powershell
+    assert "Source revision verification failed" in powershell
+    assert "winget" in powershell
+    assert "PyInstaller" in powershell
+    assert "Peke-Setup-0.3.0-x64.exe" in powershell
+    assert "Start-Process -FilePath $installedExe" in powershell
+    assert "no installer binary is hosted in the repository" in powershell
 
 
 def test_posix_installer_syntax_and_dry_run() -> None:
@@ -48,3 +49,9 @@ def test_release_workflow_generates_checksums_and_tests_installers() -> None:
     assert "windows-latest" in workflow
     assert "twine check dist/*" in workflow
     assert "Smoke-install wheel without resolving dependencies" in workflow
+    assert "windows-desktop" in workflow
+    assert "packaging/windows/Peke.spec" in workflow
+    assert "Inno Setup" in workflow
+    assert "Peke-Setup-*-x64.exe" in workflow
+    assert "Upload Windows desktop artifacts" not in workflow
+    assert "windows-desktop-installer" not in workflow

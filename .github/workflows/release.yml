@@ -147,6 +147,37 @@ jobs:
           path: release-assets/*
           if-no-files-found: error
 
+
+  windows-desktop:
+    name: Validate Windows x64 desktop installer build
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install desktop build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[gui]" pyinstaller
+      - name: Build windowed application bundle
+        run: pyinstaller packaging/windows/Peke.spec --clean --noconfirm
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+      - name: Build per-user installer
+        shell: pwsh
+        run: |
+          $version = (python -c "from peke import __version__; print(__version__)").Trim()
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$version" packaging/windows/Peke.iss
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
+      - name: Smoke-check packaged executable and installer
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "dist/Peke/Peke.exe")) { throw "Peke.exe was not produced" }
+          $installer = Get-ChildItem "dist-installer/Peke-Setup-*-x64.exe" | Select-Object -First 1
+          if (-not $installer) { throw "Inno Setup installer was not produced" }
+          Get-Item "dist/Peke/Peke.exe", $installer.FullName | Format-Table FullName, Length
+
   publish:
     needs: build
     if: startsWith(github.ref, 'refs/tags/v') && vars.PYPI_TRUSTED_PUBLISHING_ENABLED == 'true'
@@ -166,7 +197,7 @@ jobs:
           packages-dir: dist/
 
   github-release:
-    needs: build
+    needs: [build]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
@@ -182,6 +213,10 @@ jobs:
         with:
           name: github-release-assets
           path: dist
+      - name: Add source install scripts
+        shell: bash
+        run: |
+          cp install.sh dist/install.sh
       - uses: softprops/action-gh-release@v2
         with:
           body_path: release-notes.md

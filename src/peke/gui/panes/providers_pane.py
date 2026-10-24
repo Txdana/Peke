@@ -1,15 +1,15 @@
-"""Providers, Model Downloads, and Desktop Updater UI Pane."""
-import logging
+"""Provider configuration, local GGUF selection, and desktop updater pane."""
+from pathlib import Path
 from typing import Any
 
 from PySide6.QtCore import QThread, Signal, Slot
 from PySide6.QtWidgets import (
     QComboBox,
+    QFileDialog,
     QFormLayout,
     QFrame,
     QLabel,
     QLineEdit,
-    QProgressBar,
     QPushButton,
     QScrollArea,
     QVBoxLayout,
@@ -18,33 +18,8 @@ from PySide6.QtWidgets import (
 
 from peke.config import load_settings, save_user_settings
 from peke.gui import theme
-from peke.models import DEFAULT_MODEL_FILE, DEFAULT_MODEL_REPO, ModelManager
 from peke.updates import check_for_updates
 
-logger = logging.getLogger(__name__)
-
-
-class ModelDownloadWorker(QThread):
-    progress = Signal(int, int, float, float)
-    finished_ok = Signal(str)
-    failed = Signal(str)
-
-    def __init__(self, repo: str, file: str, parent=None) -> None:
-        super().__init__(parent)
-        self.repo = repo
-        self.file = file
-
-    def run(self) -> None:
-        mgr = ModelManager()
-
-        def _cb(downloaded: int, total: int, speed: float, eta: float) -> None:
-            self.progress.emit(downloaded, total, speed, eta)
-
-        try:
-            info = mgr.download_model(repo=self.repo, file=self.file, progress_callback=_cb)
-            self.finished_ok.emit(info.local_path)
-        except Exception as exc:
-            self.failed.emit(str(exc))
 
 
 class UpdateCheckWorker(QThread):
@@ -58,8 +33,6 @@ class UpdateCheckWorker(QThread):
 class ProvidersPane(QWidget):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
-        self.settings = load_settings()
-
         root = QVBoxLayout(self)
         root.setContentsMargins(16, 16, 16, 16)
         root.setSpacing(16)
@@ -108,33 +81,28 @@ class ProvidersPane(QWidget):
 
         layout.addWidget(card1)
 
-        # 2. Managed GGUF Model Downloader Card
+        # 2. Bring-your-own local GGUF model. No weights are downloaded here.
         card2 = QFrame()
         card2.setStyleSheet(f"QFrame {{ background: {theme.SURFACE}; border-radius: 12px; padding: 16px; }}")
         c2_layout = QVBoxLayout(card2)
-
-        c2_title = QLabel("Managed GGUF Model Manager")
+        c2_title = QLabel("Local GGUF Model")
         c2_title.setStyleSheet("font-size: 16px; font-weight: bold;")
         c2_layout.addWidget(c2_title)
-
-        model_form = QFormLayout()
-        self.repo_input = QLineEdit(DEFAULT_MODEL_REPO)
-        self.file_input = QLineEdit(DEFAULT_MODEL_FILE)
-        model_form.addRow("Repository:", self.repo_input)
-        model_form.addRow("GGUF File:", self.file_input)
-        c2_layout.addLayout(model_form)
-
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setVisible(False)
-        c2_layout.addWidget(self.progress_bar)
-
-        self.download_status = QLabel("")
-        c2_layout.addWidget(self.download_status)
-
-        dl_btn = QPushButton("Download Model")
-        dl_btn.clicked.connect(self._start_download)
-        c2_layout.addWidget(dl_btn)
-
+        model_row = QHBoxLayout()
+        self.model_path_input = QLineEdit(str(load_settings().model_path or ""))
+        self.model_path_input.setReadOnly(True)
+        self.model_path_input.setPlaceholderText("Choose a .gguf file stored on this computer")
+        choose_model_btn = QPushButton("Browse…")
+        choose_model_btn.clicked.connect(self.choose_model)
+        model_row.addWidget(self.model_path_input, 1)
+        model_row.addWidget(choose_model_btn)
+        c2_layout.addLayout(model_row)
+        self.model_status = QLabel("Model weights are not downloaded automatically.")
+        self.model_status.setWordWrap(True)
+        c2_layout.addWidget(self.model_status)
+        save_model_btn = QPushButton("Save local model")
+        save_model_btn.clicked.connect(self.save_local_model)
+        c2_layout.addWidget(save_model_btn)
         layout.addWidget(card2)
 
         # 3. Application Updater Card
@@ -159,6 +127,31 @@ class ProvidersPane(QWidget):
         scroll.setWidget(container)
         root.addWidget(scroll)
 
+    def choose_model(self) -> None:
+        """Let the user select an existing local GGUF model from the GUI."""
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Choose local GGUF model", "", "GGUF models (*.gguf)"
+        )
+        if path:
+            self.model_path_input.setText(path)
+            self.model_status.setText("Model selected. Save it to apply the setting.")
+
+    def save_local_model(self) -> None:
+        raw_path = self.model_path_input.text().strip()
+        if not raw_path:
+            save_user_settings({"MODEL_PATH": ""})
+            self.model_status.setText("No local model configured. Model-free extraction remains available.")
+            return
+        path = Path(raw_path).expanduser()
+        if path.suffix.lower() != ".gguf" or not path.is_file():
+            self.model_status.setText("Choose an existing .gguf model file.")
+            return
+        try:
+            save_user_settings({"MODEL_PATH": str(path.resolve())})
+            self.model_status.setText("Local model path saved. Restart Peke to load a newly selected model.")
+        except (OSError, ValueError) as exc:
+            self.model_status.setText(f"Could not save model path: {exc}")
+
     def _save_provider_settings(self) -> None:
         idx = self.provider_combo.currentIndex()
         kinds = ["local_builtin", "ollama", "openrouter", "custom_openai"]
@@ -169,44 +162,7 @@ class ProvidersPane(QWidget):
             "OLLAMA_BASE_URL": self.ollama_url_input.text(),
             "OLLAMA_MODEL": self.ollama_model_input.text(),
         })
-        self.download_status.setText(f"Saved main provider setting: {kind}")
-
-    def _start_download(self) -> None:
-        repo = self.repo_input.text().strip()
-        file = self.file_input.text().strip()
-        if not repo or not file:
-            return
-
-        self.progress_bar.setVisible(True)
-        self.progress_bar.setValue(0)
-        self.download_status.setText("Starting download...")
-
-        self.worker = ModelDownloadWorker(repo, file)
-        self.worker.progress.connect(self._on_download_progress)
-        self.worker.finished_ok.connect(self._on_download_success)
-        self.worker.failed.connect(self._on_download_failure)
-        self.worker.start()
-
-    @Slot(int, int, float, float)
-    def _on_download_progress(self, downloaded: int, total: int, speed: float, eta: float) -> None:
-        if total > 0:
-            pct = int((downloaded / total) * 100)
-            self.progress_bar.setValue(pct)
-            mb = downloaded / (1024 * 1024)
-            total_mb = total / (1024 * 1024)
-            speed_mb = speed / (1024 * 1024)
-            self.download_status.setText(f"Downloaded {mb:.1f} / {total_mb:.1f} MB ({pct}%) - {speed_mb:.1f} MB/s - ETA: {eta:.0f}s")
-
-    @Slot(str)
-    def _on_download_success(self, local_path: str) -> None:
-        self.progress_bar.setValue(100)
-        self.download_status.setText(f"Model downloaded and ready: {local_path}")
-        save_user_settings({"MODEL_PATH": local_path})
-
-    @Slot(str)
-    def _on_download_failure(self, error: str) -> None:
-        self.progress_bar.setVisible(False)
-        self.download_status.setText(f"Download error: {error}")
+        self.model_status.setText(f"Saved main provider setting: {kind}")
 
     def _check_updates(self) -> None:
         self.update_status_label.setText("Checking GitHub Releases...")

@@ -1,158 +1,108 @@
 [CmdletBinding()]
 param(
-    [string]$PEKE_VERSION = $env:PEKE_VERSION,
-    [switch]$NoModifyPath,
     [switch]$DryRun,
-    [switch]$Yes,
-    [switch]$Uninstall,
-    [switch]$FromSource
+    [switch]$NoLaunch,
+    [switch]$NoBootstrap,
+    [string]$InstallRoot = (Join-Path $env:LOCALAPPDATA "Programs\Peke")
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
-$Repo = "Txdana/Peke"
 
-# Prevent pip/pipx Unicode status messages from failing in legacy Windows console code pages.
-$env:PYTHONIOENCODING = "utf-8"
+# Release maintainers MUST replace this with the full 40-character commit SHA
+# of the source revision that contains this installer before publishing.
+$Repo = "https://github.com/Txdana/Peke.git"
+$PinnedCommit = "REPLACE_WITH_FULL_40_CHARACTER_COMMIT_SHA"
+$AppName = "Peke"
+$WorkRoot = Join-Path ([IO.Path]::GetTempPath()) ("peke-source-build-" + [guid]::NewGuid().ToString("N"))
 
-Write-Host "Peke release installer"
-Write-Host "Verifies the release wheel and hash-locked runtime requirements before installation."
-Write-Host "The Peke wheel bundles SearXNG for local search; Docker is not required."
-Write-Host "No administrator elevation is used; model weights are never downloaded."
-Write-Host "Local inference uses standalone llama-server; llama-cpp-python is not installed or compiled."
-
-if ($Uninstall) {
-    if (-not $Yes) {
-        $answer = Read-Host "Uninstall Peke from pipx and remove desktop integration? User configuration is retained [y/N]"
-        if ($answer -notin @("y", "Y")) { return }
+function Assert-ValidPin {
+    if ($PinnedCommit -notmatch '^[0-9a-f]{40}$') {
+        throw "Installer source revision is not release-pinned. Maintainers must set PinnedCommit to a full 40-character Git commit SHA."
     }
-    if (Get-Command peke -ErrorAction SilentlyContinue) {
-        peke desktop uninstall
-    }
-    if (Get-Command pipx -ErrorAction SilentlyContinue) {
-        pipx uninstall peke
-        if ($LASTEXITCODE -ne 0) { throw "pipx uninstall failed with exit code $LASTEXITCODE" }
-    } else {
-        Write-Host "pipx was not found; no package was removed."
-    }
-    Write-Host "Peke package and desktop integration removed if installed. User configuration was retained."
-    return
 }
-
-$python = Get-Command python -ErrorAction SilentlyContinue
-if (-not $python) { $python = Get-Command python3 -ErrorAction SilentlyContinue }
-if (-not $python) { throw "Python 3.10+ is required. Install Python for your user and retry." }
-$versionText = & $python.Source -c "import sys; print('%s.%s' % sys.version_info[:2])"
-if ($LASTEXITCODE -ne 0 -or [version]$versionText -lt [version]"3.10") { throw "Python 3.10+ is required." }
+function Invoke-Checked([string]$File, [string[]]$Args) {
+    & $File @Args
+    if ($LASTEXITCODE -ne 0) { throw "'$File $($Args -join ' ')' failed with exit code $LASTEXITCODE." }
+}
+Write-Host "Peke source-build installer"
+Write-Host "Pinned revision: $PinnedCommit"
+Write-Host "Builds Peke and its setup EXE locally; no installer binary is hosted in the repository and no model is downloaded."
 if ($DryRun) {
-    if ($FromSource) {
-        Write-Host "Dry run: would install the current source tree with pipx using the GUI extra and bundled SearXNG dependencies."
-    } else {
-        $target = if ($PEKE_VERSION) { "version $PEKE_VERSION" } else { "latest stable release" }
-        Write-Host "Dry run: would download $target, verify SHA256SUMS and locked requirements, then install with pipx."
-    }
+    if ($PinnedCommit -notmatch '^[0-9a-f]{40}$') { Write-Warning "PinnedCommit is not configured yet; a real install will refuse to run until a reviewed source SHA is committed." }
+    Write-Host "DRY RUN: would ensure Git, Python 3.11 x64, and Inno Setup 6 are available (using winget when needed), fetch and verify $PinnedCommit, build Peke.exe, compile a local setup EXE, install it to $InstallRoot, and launch Peke."
     return
 }
-if (-not (Get-Command pipx -ErrorAction SilentlyContinue)) {
-    Write-Host "pipx was not found; installing it for your user (no administrator rights needed)..."
-    & $python.Source -m pip install --user --quiet pipx
-    if ($LASTEXITCODE -ne 0) {
-        throw "Could not install pipx automatically. Install it yourself with: python -m pip install --user pipx"
+Assert-ValidPin
+
+function Find-ToolPath([string]$Name, [string[]]$Candidates = @()) {
+    $cmd = Get-Command $Name -ErrorAction SilentlyContinue
+    if ($cmd) { return $cmd.Source }
+    foreach ($candidate in $Candidates) {
+        if ($candidate -and (Test-Path -LiteralPath $candidate -PathType Leaf)) { return $candidate }
     }
-    $script:PekePython = $python.Source
-    # Until the user's PATH is refreshed in a new terminal, route 'pipx' through the Python module
-    # so the rest of this installer (and this session) works immediately.
-    function pipx { & $script:PekePython -m pipx @args }
-    if (-not $NoModifyPath) {
-        & $python.Source -m pipx ensurepath | Out-Null
-    }
-    $pipxBin = (& $python.Source -m pipx environment --value PIPX_BIN_DIR 2>$null)
-    if ($pipxBin -and (Test-Path -LiteralPath "$pipxBin") -and (($env:Path -split ';') -notcontains "$pipxBin")) {
-        $env:Path = "$pipxBin;$env:Path"   # current session only; ensurepath handles future terminals
-    }
-    & $python.Source -m pipx --version | Out-Null
-    if ($LASTEXITCODE -ne 0) {
-        throw "pipx was installed but could not be started. Open a new terminal and run this installer again."
-    }
-    Write-Host "pipx installed."
+    return $null
+}
+function Install-WingetPackage([string]$Id) {
+    $winget = Get-Command winget.exe -ErrorAction SilentlyContinue
+    if (-not $winget) { throw "winget is unavailable. Install App Installer from Microsoft Store, then rerun this command." }
+    Write-Host "Installing build prerequisite $Id with winget..."
+    & $winget.Source install --id $Id --exact --silent --accept-package-agreements --accept-source-agreements
+    if ($LASTEXITCODE -ne 0) { throw "winget could not install $Id (exit code $LASTEXITCODE). Install it manually and retry." }
 }
 
-if ($FromSource) {
-    Write-Host "Installing this Peke source tree, including bundled SearXNG, into the user-level pipx environment."
-    Write-Host "This step installs Python dependencies only; it does not build llama.cpp or download model weights."
-    Push-Location $PSScriptRoot
-    try {
-        pipx install --force --editable '.[gui]'
-        if ($LASTEXITCODE -ne 0) { throw "pipx source installation failed with exit code $LASTEXITCODE" }
-    } finally {
-        Pop-Location
-    }
-    if (-not $NoModifyPath) {
-        Write-Host "If peke is not recognized, add your pipx binary directory to the user PATH and open a new terminal."
-    }
-    if (Get-Command peke -ErrorAction SilentlyContinue) { peke desktop install }
-    Write-Host "Installed current source. Start Peke with: peke launch"
-    Write-Host "Source mode resolves dependencies from the configured package index; use the default mode for verified release assets."
-    return
+$git = Find-ToolPath "git.exe" @((Join-Path $env:ProgramFiles "Git\cmd\git.exe"), (Join-Path ${env:ProgramFiles(x86)} "Git\cmd\git.exe"))
+$python = Find-ToolPath "python.exe" @((Join-Path $env:LOCALAPPDATA "Programs\Python\Python311\python.exe"), (Join-Path $env:ProgramFiles "Python311\python.exe"))
+$iscc = Find-ToolPath "ISCC.exe" @((Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"), (Join-Path $env:ProgramFiles "Inno Setup 6\ISCC.exe"))
+if (-not $NoBootstrap) {
+    if (-not $git) { Install-WingetPackage "Git.Git" }
+    if (-not $python) { Install-WingetPackage "Python.Python.3.11" }
+    if (-not $iscc) { Install-WingetPackage "JRSoftware.InnoSetup" }
+    # winget installers may not refresh this PowerShell process' PATH. Probe standard locations again.
+    $git = Find-ToolPath "git.exe" @((Join-Path $env:ProgramFiles "Git\cmd\git.exe"), (Join-Path ${env:ProgramFiles(x86)} "Git\cmd\git.exe"))
+    $python = Find-ToolPath "python.exe" @((Join-Path $env:LOCALAPPDATA "Programs\Python\Python311\python.exe"), (Join-Path $env:ProgramFiles "Python311\python.exe"))
+    $iscc = Find-ToolPath "ISCC.exe" @((Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"), (Join-Path $env:ProgramFiles "Inno Setup 6\ISCC.exe"))
 }
-
-if ($PEKE_VERSION) {
-    $version = $PEKE_VERSION.TrimStart('v')
-    $apiUrl = "https://api.github.com/repos/$Repo/releases/tags/v$version"
-} else {
-    $apiUrl = "https://api.github.com/repos/$Repo/releases/latest"
-}
+if (-not $git) { throw "Git for Windows was not found after prerequisite setup. Install Git and retry." }
+if (-not $python) { throw "Python 3.11 x64 was not found after prerequisite setup. Install Python 3.11 x64 and retry." }
+if (-not $iscc) { throw "Inno Setup 6 compiler (ISCC.exe) was not found after prerequisite setup. Install Inno Setup 6 and retry." }
+$pythonVersion = & $python --version 2>&1
+if ($pythonVersion -notmatch '^Python 3\.(11|12)\.') { throw "Python 3.11 or later is required; found '$pythonVersion'." }
+New-Item -ItemType Directory -Path $WorkRoot | Out-Null
 try {
-    $release = Invoke-RestMethod -Uri $apiUrl -Headers @{ "Accept" = "application/vnd.github+json"; "X-GitHub-Api-Version" = "2022-11-28" }
-} catch {
-    if ($PEKE_VERSION) {
-        throw "Could not find or access Peke release v$version on GitHub. Confirm that this tag has a published release with the wheel, requirements-hashed.txt, and SHA256SUMS. For source installation, clone https://github.com/$Repo, cd into the checkout, and run .\install.ps1 -FromSource."
-    }
-    throw "No latest stable Peke release is published on GitHub yet (the Releases page may be empty). For source installation, run: git clone https://github.com/$Repo; cd Peke; .\install.ps1 -FromSource. For verified release installation, the maintainer must publish a release containing the wheel, requirements-hashed.txt, and SHA256SUMS."
-}
-$wheels = @($release.assets | Where-Object { $_.name -like "peke-*.whl" })
-if ($wheels.Count -ne 1) { throw "Expected exactly one Peke wheel in release; found $($wheels.Count). Refusing to install an incomplete release." }
-$wheelAsset = $wheels[0]
-$requirementsAsset = $release.assets | Where-Object { $_.name -eq "requirements-hashed.txt" } | Select-Object -First 1
-$sumsAsset = $release.assets | Where-Object { $_.name -eq "SHA256SUMS" } | Select-Object -First 1
-if (-not $requirementsAsset -or -not $sumsAsset) { throw "Release must contain requirements-hashed.txt and SHA256SUMS." }
-foreach ($asset in @($wheelAsset, $requirementsAsset, $sumsAsset)) {
-    if ($asset.browser_download_url -notmatch '^https://github\.com/') { throw "Unexpected release asset URL host." }
-}
-$temp = Join-Path ([IO.Path]::GetTempPath()) ("peke-install-" + [guid]::NewGuid().ToString('N'))
-New-Item -ItemType Directory -Path $temp | Out-Null
-try {
-    $wheelPath = Join-Path $temp $wheelAsset.name
-    $requirementsPath = Join-Path $temp "requirements-hashed.txt"
-    $sumsPath = Join-Path $temp "SHA256SUMS"
-    Invoke-WebRequest -Uri $wheelAsset.browser_download_url -OutFile $wheelPath
-    Invoke-WebRequest -Uri $requirementsAsset.browser_download_url -OutFile $requirementsPath
-    Invoke-WebRequest -Uri $sumsAsset.browser_download_url -OutFile $sumsPath
+    $source = Join-Path $WorkRoot "source"
+    Invoke-Checked $git @("init", $source)
+    Invoke-Checked $git @("-C", $source, "remote", "add", "origin", $Repo)
+    Invoke-Checked $git @("-C", $source, "fetch", "--depth", "1", "origin", $PinnedCommit)
+    Invoke-Checked $git @("-C", $source, "checkout", "--detach", "FETCH_HEAD")
+    $actual = (& $git -C $source rev-parse HEAD).Trim().ToLowerInvariant()
+    if ($LASTEXITCODE -ne 0 -or $actual -ne $PinnedCommit) { throw "Source revision verification failed. Expected $PinnedCommit; got $actual. Refusing to build." }
 
-    foreach ($target in @(@{ Name = $wheelAsset.name; Path = $wheelPath }, @{ Name = $requirementsAsset.name; Path = $requirementsPath })) {
-        $escapedName = [regex]::Escape($target.Name)
-        $manifestLines = @(Get-Content $sumsPath | Where-Object { $_ -match ("^([a-fA-F0-9]{64})\s+\*?" + $escapedName + "$") })
-        if ($manifestLines.Count -ne 1) { throw "The release manifest has no unique SHA-256 entry for $($target.Name)." }
-        $expected = [regex]::Match($manifestLines[0], '^([a-fA-F0-9]{64})').Groups[1].Value.ToLowerInvariant()
-        $actual = (Get-FileHash -Algorithm SHA256 -Path $target.Path).Hash.ToLowerInvariant()
-        if ($actual -ne $expected) { throw "SHA-256 verification failed for $($target.Name); refusing to continue." }
-    }
+    $venv = Join-Path $source ".venv-build"
+    Invoke-Checked $python @("-m", "venv", $venv)
+    $python = Join-Path $venv "Scripts\python.exe"
+    $pip = @("-m", "pip", "install", "--disable-pip-version-check", "--upgrade", "pip")
+    Invoke-Checked $python $pip
+    Invoke-Checked $python @("-m", "pip", "install", ".[gui]", "pyinstaller==6.16.0")
+    Invoke-Checked $python @("-m", "PyInstaller", "packaging/windows/Peke.spec", "--clean", "--noconfirm")
+    $exe = Join-Path $source "dist\Peke\Peke.exe"
+    if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) { throw "PyInstaller did not produce dist\Peke\Peke.exe." }
 
-    Write-Host "Verified $($wheelAsset.name) and hash-locked runtime requirements. Installing..."
-    pipx install --force --pip-args="--no-deps" $wheelPath
-    if ($LASTEXITCODE -ne 0) { throw "pipx wheel installation failed with exit code $LASTEXITCODE" }
-    pipx runpip peke install --require-hashes -r $requirementsPath
-    if ($LASTEXITCODE -ne 0) {
-        pipx uninstall peke | Out-Null
-        throw "Locked dependency installation failed; Peke was removed to avoid leaving a broken install."
+    Invoke-Checked $iscc @("/DAppVersion=0.3.0", (Join-Path $source "packaging\windows\Peke.iss"))
+    $setup = Join-Path $source "dist-installer\Peke-Setup-0.3.0-x64.exe"
+    if (-not (Test-Path -LiteralPath $setup -PathType Leaf)) { throw "Inno Setup did not produce the expected setup executable." }
+    if ($NoLaunch) {
+        $savedSetup = Join-Path (Get-Location).Path "Peke-Setup-0.3.0-x64.exe"
+        Copy-Item -LiteralPath $setup -Destination $savedSetup -Force
+        Write-Host "Build complete: $savedSetup"
+        return
     }
+    $args = @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/DIR=$InstallRoot")
+    $proc = Start-Process -FilePath $setup -ArgumentList $args -Wait -PassThru
+    if ($proc.ExitCode -ne 0) { throw "Peke Setup exited with code $($proc.ExitCode)." }
+    $installedExe = Join-Path $InstallRoot "Peke.exe"
+    if (-not (Test-Path -LiteralPath $installedExe -PathType Leaf)) { throw "Installation completed but Peke.exe was not found at $installedExe." }
+    Write-Host "Peke installed to $InstallRoot. Launching the desktop app..."
+    Start-Process -FilePath $installedExe -WorkingDirectory $InstallRoot
 } finally {
-    Remove-Item -LiteralPath $temp -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $WorkRoot -Recurse -Force -ErrorAction SilentlyContinue
 }
-if (-not $NoModifyPath) {
-    Write-Host "If peke is not recognized, add your pipx binary directory to the user PATH and open a new terminal."
-}
-if (Get-Command peke -ErrorAction SilentlyContinue) {
-    peke desktop install
-}
-Write-Host "Installed. Start Peke with: peke launch"
-Write-Host "User configuration is managed by Peke and is not removed by uninstall."

@@ -1,0 +1,56 @@
+name: Windows desktop validation
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install project and build tools
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[gui,dev]" pyinstaller==6.16.0
+      - name: Unit tests
+        run: python -m pytest -q
+      - name: Validate packaging files
+        shell: pwsh
+        run: |
+          if (!(Test-Path packaging/windows/Peke.spec)) { throw "PyInstaller spec missing" }
+          if (!(Test-Path packaging/windows/Peke.iss)) { throw "Inno Setup script missing" }
+          if (!(Test-Path src/peke/gui/assets/peke.ico)) { throw "Application icon missing" }
+          python scripts/validate_desktop_build.py
+      - name: Source installer dry-run
+        shell: pwsh
+        run: ./install.ps1 -DryRun
+      - name: GUI startup smoke check
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python scripts/gui_smoke.py
+      - name: Build windowed application
+        run: python -m PyInstaller packaging/windows/Peke.spec --clean --noconfirm
+      - name: Validate packaged executable
+        shell: pwsh
+        run: |
+          $exe = "dist/Peke/Peke.exe"
+          if (!(Test-Path $exe)) { throw "Expected GUI executable was not built: $exe" }
+          $item = Get-Item $exe
+          if ($item.Length -lt 1000000) { throw "Packaged executable unexpectedly small ($($item.Length) bytes)" }
+      - name: Inno Setup installer dry-run
+        shell: pwsh
+        run: |
+          choco install innosetup --no-progress -y
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (!(Test-Path $iscc)) { throw "Inno Setup compiler missing after installation" }
+          & $iscc /DAppVersion=0.3.0 /Qp packaging/windows/Peke.iss
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup compilation failed" }
+          if (!(Test-Path "dist-installer/Peke-Setup-0.3.0-x64.exe")) { throw "Installer output missing" }

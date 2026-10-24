@@ -1,40 +1,48 @@
-# Installers
+# Installers and release integrity
 
-The repository scripts `install.sh` and `install.ps1` install a **published GitHub Release wheel** and its release-specific, hash-locked runtime dependency list. They:
+## Windows desktop app (recommended)
 
-1. Resolve the latest stable release or the exact version supplied in `PEKE_VERSION`.
-2. Download the wheel, `requirements-hashed.txt`, and `SHA256SUMS` over HTTPS.
-3. Verify the wheel and dependency lock against the manifest before installation.
-4. Install the local Peke wheel into a pipx environment without resolving dependencies, then install runtime dependencies with pip's `--require-hashes` mode.
-
-A missing or mismatched manifest entry causes installation to stop. No administrator elevation is used and model weights are never downloaded. The Peke wheel includes the SearXNG source and its runtime requirements, so the local Search & Research service does not require Docker; it still uses the Python environment required by this installer. Python 3.10+ and `pipx` must already be installed. The release workflow uses pinned uv version 0.10.0 to resolve and export the runtime dependency lock for the release; the lock is attached to the release so subsequent installs use the same resolved versions and hashes.
-
-POSIX shell:
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/Txdana/Peke/main/install.sh | sh
-```
-
-PowerShell:
+The recommended consumer path is a source-build command. The repository contains the PowerShell installer script and the Inno Setup recipe, not a prebuilt Windows installer executable:
 
 ```powershell
 irm https://raw.githubusercontent.com/Txdana/Peke/main/install.ps1 | iex
 ```
 
-Options: `--dry-run`, `--yes`, `--no-modify-path`, `--uninstall`; PowerShell equivalents are `-DryRun`, `-Yes`, `-NoModifyPath`, `-Uninstall`. `PEKE_VERSION` may be set to a published version such as `0.3.0` or `v0.3.0`. The default is the latest stable GitHub Release. The scripts intentionally fail if the release is missing the expected wheel, lock file, or manifest.
+The script bootstraps missing build tools through `winget` when available, fetches a pinned Git commit, verifies the checked-out SHA, builds the windowed GUI with PyInstaller, compiles `Peke-Setup-<version>-x64.exe` locally with Inno Setup, runs it as a per-user installation, and launches Peke. The temporary build directory is removed afterward. The installed app creates a Start menu shortcut, offers an optional desktop shortcut, and registers an uninstaller. No model weights are bundled or downloaded; the user selects a `.gguf` file from Model Settings.
 
-For a checkout or extracted source archive, Windows also supports `./install.ps1 -FromSource`. This keeps the same pipx-based installation approach but installs the current source tree (including bundled SearXNG) in editable mode with the GUI extra. Source mode resolves dependencies from the configured package index and does not use the release checksum lock; use the default mode for published, checksum-verified release assets.
+A full 40-character reviewed source SHA must be committed in `install.ps1`. The script refuses to run a real build if the pin is missing or invalid, and it never substitutes `main` or another moving branch for the pinned revision. `-DryRun` previews the actions without installing prerequisites. `-NoLaunch` builds the setup executable without installing it; `-NoBootstrap` skips automatic prerequisite installation for controlled environments.
 
-## Integrity limitations
+This source-build path is distinct from publishing a prebuilt setup EXE. Do not commit generated `.exe` files or `dist/` output to the source repository.
 
-The checksum manifest and assets are delivered by the same GitHub Release. This detects corruption or mismatched assets, but does not independently authenticate the release against a compromised repository account or release pipeline. The lock covers runtime dependencies and hashes, but source builds can still require build-system dependencies. The normal Peke install does not install or compile `llama-cpp-python`; local inference uses a separately installed standalone `llama-server` executable. The installer does not bootstrap Python or pipx.
+## Linux and macOS package installer
 
-The in-app `peke update` command remains a convenience wrapper around `pipx upgrade peke` and uses the configured package index; it does not use the release-specific lock. To update with the verified release artifacts, rerun the bootstrap script with `PEKE_VERSION` set to the target published version. Manual install from PyPI remains available:
+`install.sh` is the existing verified Python package installer for Linux/macOS and automation use. It installs a published wheel into a user-level pipx environment after checking the wheel, dependency lock, and `SHA256SUMS`. It requires Python 3.10+ and pipx; it is not a native GUI installer.
 
 ```sh
-pipx install 'peke[gui]'
-peke doctor
-peke launch
+curl -fsSL https://github.com/Txdana/Peke/releases/latest/download/install.sh | sh
 ```
 
-The manual PyPI command uses normal pip dependency resolution and does not consume the release's hash-locked requirements file. Uninstalling removes the pipx-managed application but intentionally retains Peke's user configuration. That configuration location is determined by `platformdirs`; `PEKE_HOME` is not used as an application setting directory.
+For a source checkout, use `./install.sh --from-source`. For specific options and platform caveats, inspect `install.sh --dry-run` and the script help/comments.
+
+## Developer source installation
+
+```powershell
+python -m pip install -e ".[gui,dev]"
+python -m peke.desktop.launcher
+```
+
+Source mode is intended for development and may resolve dependencies from the configured package index. It is not the recommended consumer install path.
+
+## Windows packaging
+
+Build on Windows x64 with Python 3.12 and Inno Setup 6:
+
+```powershell
+python -m pip install -e ".[gui]" pyinstaller
+pyinstaller packaging/windows/Peke.spec --clean --noconfirm
+& "$env:ProgramFiles(x86)\Inno Setup 6\ISCC.exe" packaging/windows/Peke.iss
+```
+
+The output is `dist/Peke/` plus `dist-installer/Peke-Setup-<version>-x64.exe`. PyInstaller cannot produce a native Windows executable when run on Linux/macOS. Test on a clean Windows VM without Python installed, including model selection, app restart, shortcuts, uninstall, and first-run experience.
+
+Windows CI compiles the installer recipe on a Windows runner to validate packaging. This does not require committing or publishing the generated setup EXE. Build artifacts are not proof of successful GUI behavior; do a clean-machine launch test before any public release.

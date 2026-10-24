@@ -56,3 +56,5 @@ out.json
 /models/
 !src/peke/models/
 output/
+dist-installer/
+*.spec.bak

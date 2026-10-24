@@ -4,9 +4,9 @@ import os
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QThread, Signal, Slot
+from PySide6.QtCore import QObject, QThread, Signal, Slot, QSettings
 from PySide6.QtGui import QFont, QFontDatabase, QIcon
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QMessageBox
 
 from peke.config import load_settings
 from peke.extract import Extractor
@@ -79,6 +79,29 @@ def run_gui(no_splash: bool = False) -> int:
             splash.close()
         if not window.isVisible():
             window.show()
+        # First-run onboarding is deliberately in-app. Never invoke CLI setup or
+        # download a model automatically; the user chooses their own GGUF file.
+        onboarding = QSettings("Peke", "PekeWorkbench")
+        if not onboarding.value("first_run_complete", False, type=bool):
+            welcome = QMessageBox(window)
+            welcome.setWindowTitle("Welcome to Peke")
+            welcome.setIcon(QMessageBox.Icon.Information)
+            welcome.setText("Welcome to Peke")
+            welcome.setInformativeText(
+                "Peke is ready to use. You can run supported deterministic extraction "
+                "without a language model. For local AI extraction, open Providers → Local GGUF Model "
+                "and choose a .gguf model already on your computer. Peke will not "
+                "download model weights automatically."
+            )
+            choose_model = welcome.addButton("Choose model…", QMessageBox.ButtonRole.ActionRole)
+            welcome.addButton("Continue", QMessageBox.ButtonRole.AcceptRole)
+            welcome.exec()
+            onboarding.setValue("first_run_complete", True)
+            if welcome.clickedButton() == choose_model:
+                window.workspace.setCurrentWidget(window.workspace.providers_page)
+                chooser = getattr(window.workspace.providers_page, "choose_model", None)
+                if callable(chooser):
+                    chooser()
         startup_thread.quit()
 
     startup_worker.finished.connect(startup_ready)

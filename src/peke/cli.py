@@ -517,15 +517,11 @@ def setup() -> None:
 
 @app.command()
 def launch() -> None:
-    """Run first-time setup if needed, then open the desktop GUI."""
-    config_path = user_settings_path()
-    if not config_path.exists():
-        setup()
-        return
+    """Open the desktop GUI directly; first-run configuration happens in the app."""
     try:
         from peke.gui.app import run_gui
     except ImportError as exc:
-        console.print("Install the GUI with: pipx install 'peke[gui]'", markup=False)
+        console.print("The Peke desktop GUI is unavailable. Install the GUI extra with: pip install 'peke[gui]'", markup=False)
         raise typer.Exit(1) from exc
     raise typer.Exit(code=run_gui())
 
