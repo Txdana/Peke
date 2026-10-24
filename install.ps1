@@ -11,6 +11,9 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 $Repo = "Txdana/Peke"
 
+# Prevent pip/pipx Unicode status messages from failing in legacy Windows console code pages.
+$env:PYTHONIOENCODING = "utf-8"
+
 Write-Host "Peke release installer"
 Write-Host "Verifies the release wheel and hash-locked runtime requirements before installation."
 Write-Host "The Peke wheel bundles SearXNG for local search; Docker is not required."
@@ -96,9 +99,16 @@ if ($PEKE_VERSION) {
 } else {
     $apiUrl = "https://api.github.com/repos/$Repo/releases/latest"
 }
-$release = Invoke-RestMethod -Uri $apiUrl -Headers @{ "Accept" = "application/vnd.github+json"; "X-GitHub-Api-Version" = "2022-11-28" }
+try {
+    $release = Invoke-RestMethod -Uri $apiUrl -Headers @{ "Accept" = "application/vnd.github+json"; "X-GitHub-Api-Version" = "2022-11-28" }
+} catch {
+    if ($PEKE_VERSION) {
+        throw "Could not find or access Peke release v$version on GitHub. Confirm that this tag has a published release with the wheel, requirements-hashed.txt, and SHA256SUMS. For source installation, clone https://github.com/$Repo, cd into the checkout, and run .\install.ps1 -FromSource."
+    }
+    throw "No latest stable Peke release is published on GitHub yet (the Releases page may be empty). For source installation, run: git clone https://github.com/$Repo; cd Peke; .\install.ps1 -FromSource. For verified release installation, the maintainer must publish a release containing the wheel, requirements-hashed.txt, and SHA256SUMS."
+}
 $wheels = @($release.assets | Where-Object { $_.name -like "peke-*.whl" })
-if ($wheels.Count -ne 1) { throw "Expected exactly one Peke wheel in release; found $($wheels.Count)." }
+if ($wheels.Count -ne 1) { throw "Expected exactly one Peke wheel in release; found $($wheels.Count). Refusing to install an incomplete release." }
 $wheelAsset = $wheels[0]
 $requirementsAsset = $release.assets | Where-Object { $_.name -eq "requirements-hashed.txt" } | Select-Object -First 1
 $sumsAsset = $release.assets | Where-Object { $_.name -eq "SHA256SUMS" } | Select-Object -First 1
