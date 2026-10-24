@@ -15,7 +15,7 @@ def test_endpoint_tree_groups_and_marks_hidden(qtbot):
     assert tree.topLevelItemCount() == 1
     host = tree.topLevelItem(0)
     assert host.childCount() == 1
-    group = host.child(0)
+    group = host.child(0).child(0)
     assert group.childCount() == 2
     assert "Hidden" in group.child(0).text(2)
 

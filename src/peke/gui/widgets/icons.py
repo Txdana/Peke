@@ -3,6 +3,7 @@ from PySide6.QtCore import QByteArray, Qt
 from PySide6.QtGui import QPixmap
 from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import QLabel
+
 from peke.gui import theme
 
 PATHS = {

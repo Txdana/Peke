@@ -1,5 +1,5 @@
-from pathlib import Path
 from unittest.mock import MagicMock
+
 from peke.config import Settings
 from peke.extract import Extractor
 from peke.schemas import Article

@@ -1,4 +1,5 @@
 import json
+
 from peke.discover import load_findings, merge_findings
 from peke.profile import load_profile
 

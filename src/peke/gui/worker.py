@@ -1,11 +1,13 @@
 """Pipeline worker executed on a dedicated QThread."""
 import threading
 from pathlib import Path
-from PySide6.QtCore import QObject, Signal, Slot, QSettings
+
+from PySide6.QtCore import QObject, QSettings, Signal, Slot
+
 from peke.config import load_settings
-from peke.pipeline import Pipeline
-from peke.profile import Profile, load_profile, ProfileError
 from peke.extract import Extractor
+from peke.pipeline import Pipeline
+from peke.profile import Profile, ProfileError, load_profile
 
 
 class PipelineWorker(QObject):

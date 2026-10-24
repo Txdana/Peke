@@ -1,5 +1,6 @@
 """GUI settings persistence tests; executed by the offscreen Qt CI job."""
 import json
+
 import pytest
 
 pytest.importorskip("PySide6")

@@ -1,13 +1,35 @@
 """Collapsible navigation rail for Peke."""
 from PySide6.QtCore import QEasingCurve, QPropertyAnimation
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
+
 from peke.banner import rea_available
 from peke.config import load_settings
 from peke.gui import theme
 from peke.gui.widgets.icons import svg_icon
 from peke.gui.widgets.vram_card import VramCard
 
-NAV_ITEMS = [("Target Inspection (REA)", "target"), ("Stealth Scraper", "scraper"), ("Model Pipeline (llama.cpp)", "model"), ("JSON Schemas", "schema")]
+NAV_ITEMS = [
+    ("Target Inspection (REA)", "target"),
+    ("Stealth Scraper", "scraper"),
+    ("Model Pipeline (llama.cpp)", "model"),
+    ("JSON Schemas", "schema"),
+    ("Agent Access (MCP)", "target"),
+]
+
+
+def check_mcp_active() -> tuple[bool, str]:
+    from peke.mcp.clients.registrars import get_all_registrars
+
+    rea_ok = rea_available(load_settings().rea_command)
+    agents_registered = any(r.is_registered() for r in get_all_registrars())
+    if agents_registered or rea_ok:
+        reasons = []
+        if agents_registered:
+            reasons.append("Peke registered with AI agents")
+        if rea_ok:
+            reasons.append("REA CLI available")
+        return True, " · ".join(reasons)
+    return False, "No AI agent registered and REA CLI missing"
 
 
 class Sidebar(QFrame):
@@ -29,9 +51,10 @@ class Sidebar(QFrame):
         head = QHBoxLayout()
         self.brand = QLabel("Peke")
         self.brand.setStyleSheet("font-family:'Fraunces',serif;font-size:23px;font-weight:700")
-        rea_found = rea_available(load_settings().rea_command)
-        self.chip = QLabel("●  REA CLI Found" if rea_found else "●  REA CLI Missing")
-        self.chip.setStyleSheet(f"background:{theme.SAGE if rea_found else theme.MUTED_TEXT};color:white;border-radius:10px;padding:4px 7px;font-size:10px")
+        active, tooltip = check_mcp_active()
+        self.chip = QLabel("●  MCP Active" if active else "●  MCP Off")
+        self.chip.setToolTip(tooltip)
+        self.chip.setStyleSheet(f"background:{theme.SAGE if active else theme.MUTED_TEXT};color:white;border-radius:10px;padding:4px 7px;font-size:10px")
         head.addWidget(self.brand)
         head.addStretch(1)
         head.addWidget(self.chip)

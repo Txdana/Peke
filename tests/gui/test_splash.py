@@ -1,8 +1,10 @@
 """Optional GUI splash tests; skipped when Qt extras are not installed."""
 import os
+
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
+
 pytest.importorskip("PySide6")
 pytest.importorskip("pytestqt")
 

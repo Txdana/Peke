@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from peke.config import ConfigError, Settings
-from peke.extract import Extractor, ExtractionError
+from peke.extract import ExtractionError, Extractor
 from peke.schemas import Article
 
 

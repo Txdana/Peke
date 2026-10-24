@@ -4,7 +4,7 @@ import os
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QThread, Signal, Slot, Qt
+from PySide6.QtCore import QObject, QThread, Signal, Slot
 from PySide6.QtGui import QFont, QFontDatabase, QIcon
 from PySide6.QtWidgets import QApplication
 
@@ -82,6 +82,7 @@ def run_gui(no_splash: bool = False) -> int:
     def show_startup_warning(message: str) -> None:
         logger.warning("%s", message)
         from datetime import datetime, timezone
+
         from peke.pipeline import Event
 
         event = Event(datetime.now(timezone.utc).isoformat(), "discover", "warn", message, "MODEL")

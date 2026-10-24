@@ -1,14 +1,17 @@
 """Headless extraction pipeline."""
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
 import logging
 import time
-from typing import Any, Callable, Literal
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from typing import Any, Literal
+
 from pydantic import BaseModel
+
 from peke.config import ConfigError, Settings, load_settings
+from peke.discover import merge_findings, run_rea
 from peke.extract import ExtractionError, ExtractionResult, Extractor, validate_json
 from peke.fetch import FetchError, FetchResult, fetch
-from peke.discover import run_rea, merge_findings
 from peke.profile import Profile, redact_url
 from peke.schemas import get_schema
 

@@ -220,7 +220,7 @@ class ModelSettingsPage(QWidget):
                 "REA_CDP_ENDPOINT": self.rea_cdp_endpoint.text().strip() or "http://127.0.0.1:9222",
             }
             save_user_settings(values)
-            self.status.setText(f"Settings saved. Restart Peke to apply model settings.")
+            self.status.setText("Settings saved. Restart Peke to apply model settings.")
         except (ImportError, OSError, ValueError) as exc:
             self.status.setText(f"Could not save settings: {exc}")
 

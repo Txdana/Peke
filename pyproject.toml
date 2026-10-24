@@ -4,12 +4,23 @@ build-backend = "hatchling.build"
 
 [project]
 name = "peke"
-version = "0.1.0"
+version = "0.2.0"
 description = "Local-first open-source data extraction pipeline"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
-dependencies = ["scrapling[fetchers]", "llama-cpp-python", "pydantic>=2", "pyyaml", "python-dotenv", "typer", "rich", "platformdirs"]
+dependencies = [
+    "scrapling[fetchers]",
+    "llama-cpp-python",
+    "pydantic>=2",
+    "pyyaml",
+    "python-dotenv",
+    "typer",
+    "rich",
+    "platformdirs",
+    "mcp>=2.3,<3",
+    "filelock",
+]
 
 [project.optional-dependencies]
 gui = ["PySide6"]

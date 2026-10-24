@@ -1,4 +1,5 @@
 from unittest.mock import patch
+
 from peke.config import Settings
 from peke.fetch import FetchResult
 from peke.pipeline import Pipeline

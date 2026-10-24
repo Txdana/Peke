@@ -1,9 +1,26 @@
 """JSON editor with lightweight syntax highlighting, line numbers and search."""
 import json
 import re
+
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QFont, QPainter, QTextCharFormat, QSyntaxHighlighter, QKeySequence, QShortcut
-from PySide6.QtWidgets import QPlainTextEdit, QWidget, QHBoxLayout, QLineEdit, QPushButton, QVBoxLayout
+from PySide6.QtGui import (
+    QColor,
+    QFont,
+    QKeySequence,
+    QPainter,
+    QShortcut,
+    QSyntaxHighlighter,
+    QTextCharFormat,
+)
+from PySide6.QtWidgets import (
+    QHBoxLayout,
+    QLineEdit,
+    QPlainTextEdit,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
+
 from peke.gui import theme
 
 
@@ -64,7 +81,7 @@ class JsonTextEdit(QPlainTextEdit):
         self._all_text = ""
         self._show_all = False
         self.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
-        self.setStyleSheet(f"font-family:'IBM Plex Mono',monospace;font-size:12px;padding-left:5px")
+        self.setStyleSheet("font-family:'IBM Plex Mono',monospace;font-size:12px;padding-left:5px")
 
     def line_number_area_width(self) -> int:
         return 10 + self.fontMetrics().horizontalAdvance("9") * len(str(max(1, self.blockCount())))

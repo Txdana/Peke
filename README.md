@@ -62,9 +62,26 @@ REA is optional. Its findings are hints, not proof that an endpoint is safe, sta
 - For LLM extraction: a compatible local GGUF model and enough RAM/VRAM for its size and context.
 - For GPU memory telemetry: optional `nvidia-ml-py`; CPU RAM fallback uses optional `psutil`.
 
+## Local AI Agent Integration (MCP Server)
+
+Peke acts as a Model Context Protocol (MCP) server for local AI agents such as Claude Code, Claude Desktop, Codex, Cursor, Gemini CLI, VS Code, and Windsurf:
+
+```bash
+# Register Peke with your local AI agents
+peke mcp install
+
+# Test server readiness and stdio handshake
+peke mcp doctor
+```
+
+Agents can use Peke's 11 tools to stealth-fetch pages, discover API endpoints, probe JSON shapes, and extract schema-valid data using local GGUF models. See [`docs/mcp.md`](docs/mcp.md) and [`docs/mcp-security.md`](docs/mcp-security.md) for details.
+
 ## CLI reference
 
 - `peke` — show the terminal banner, then launch the GUI.
+- `peke mcp serve` — run stdio or HTTP MCP server for AI agents.
+- `peke mcp install` — register Peke with detected local AI agents.
+- `peke mcp doctor` — test agent registrations and stdio handshake.
 - `peke --no-banner` — launch without terminal branding.
 - `peke --no-splash` — skip the GUI splash for this launch.
 - `peke --version` — show the banner and version; combine with `--no-banner` for version only.

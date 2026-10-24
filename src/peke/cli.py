@@ -14,11 +14,13 @@ from peke import __version__
 from peke.banner import print_banner
 from peke.config import ConfigError, load_settings, save_user_settings, user_settings_path
 from peke.discover import run_rea
+from peke.mcp.cli import mcp_app
 from peke.pipeline import Event, Pipeline
 from peke.profile import ProfileError, load_profile
 from peke.schemas import get_schema, list_schemas
 
 app = typer.Typer(name="peke", help="Peke: local-first data extraction workbench", no_args_is_help=False)
+app.add_typer(mcp_app, name="mcp", help="Peke MCP server management and agent registration")
 console = Console()
 
 
@@ -121,6 +123,11 @@ def doctor() -> None:
             table.add_row("REA CDP endpoint", "FAIL", str(exc))
     else:
         table.add_row("REA CLI", "OPTIONAL", "REA_COMMAND not set; Peke works without REA")
+
+    from peke.mcp.clients.registrars import get_all_registrars
+    mcp_regs = [r for r in get_all_registrars() if r.is_registered()]
+    table.add_row("MCP Registrations", "PASS" if mcp_regs else "INFO",
+                  f"{len(mcp_regs)} agent(s) registered ({', '.join(r.display_name for r in mcp_regs) if mcp_regs else 'none'})")
     console.print(table)
 
 
@@ -189,6 +196,14 @@ def setup() -> None:
         console.print(f"[red]Could not write config: {exc}[/red]")
         raise typer.Exit(2) from exc
     console.print(f"[green]Saved configuration:[/green] {config_path}")
+
+    if Confirm.ask("Connect Peke to your AI agents?", default=False):
+        from peke.mcp.cli import install_command
+        try:
+            install_command(client=None, scope="user", transport="stdio", port=8765, dry_run=False, yes=False, skill=True)
+        except SystemExit:
+            pass
+
     if not Confirm.ask("Open the GUI now?", default=True):
         return
     try:
@@ -219,8 +234,9 @@ def update(
     yes: bool = typer.Option(False, "--yes", help="Skip confirmation"),
 ) -> None:
     """Update the pipx-managed Peke installation."""
-    from rich.prompt import Confirm
     import shutil
+
+    from rich.prompt import Confirm
 
     pipx = shutil.which("pipx")
     if not pipx:
@@ -234,15 +250,23 @@ def update(
     if result.returncode:
         raise typer.Exit(result.returncode)
 
+    # Re-validate agent registrations
+    from peke.mcp.clients.registrars import get_all_registrars
+    for reg in get_all_registrars():
+        if reg.is_registered():
+            reg.install(dry_run=False)
+    console.print("[green]Re-validated Peke MCP agent registrations.[/green]")
+
 
 @app.command()
 def uninstall(
     yes: bool = typer.Option(False, "--yes", help="Skip confirmation"),
 ) -> None:
     """Uninstall the pipx-managed package; user configuration is retained."""
-    from rich.prompt import Confirm
     import shutil
     import subprocess
+
+    from rich.prompt import Confirm
 
     pipx = shutil.which("pipx")
     if not pipx:
@@ -250,6 +274,14 @@ def uninstall(
         raise typer.Exit(1)
     if not yes and not Confirm.ask("Uninstall Peke? User configuration will be retained.", default=False):
         raise typer.Exit()
+
+    from peke.mcp.clients.registrars import get_all_registrars
+    registered = [r for r in get_all_registrars() if r.is_registered()]
+    if registered and (yes or Confirm.ask("Remove Peke MCP server registrations from local AI agents?", default=True)):
+        for reg in registered:
+            reg.uninstall()
+        console.print("[green]Removed Peke MCP agent registrations.[/green]")
+
     result = subprocess.run([pipx, "uninstall", "peke"], check=False)
     if result.returncode:
         raise typer.Exit(result.returncode)

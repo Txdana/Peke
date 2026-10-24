@@ -35,22 +35,26 @@ def test_rea_command_is_only_best_effort(monkeypatch) -> None:
 
 def test_version_command_has_banner_and_version() -> None:
     from typer.testing import CliRunner
+
+    from peke import __version__
     from peke.cli import app
 
     result = CliRunner().invoke(app, ["--version"])
     assert result.exit_code == 0
     assert "PEKE" in result.stdout
-    assert "peke 0.1.0" in result.stdout
+    assert f"peke {__version__}" in result.stdout
 
 
 def test_version_command_can_disable_banner() -> None:
     from typer.testing import CliRunner
+
+    from peke import __version__
     from peke.cli import app
 
     result = CliRunner().invoke(app, ["--version", "--no-banner"])
     assert result.exit_code == 0
     assert "PEKE" not in result.stdout
-    assert "peke 0.1.0" in result.stdout
+    assert f"peke {__version__}" in result.stdout
 
 
 def test_banner_uses_color_on_tty_when_allowed(monkeypatch) -> None:

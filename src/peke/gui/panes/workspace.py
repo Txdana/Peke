@@ -1,10 +1,22 @@
 """Target inspection workspace and phase-two placeholder pages."""
 from PySide6.QtCore import Signal
-from PySide6.QtWidgets import QComboBox, QFrame, QHBoxLayout, QLabel, QLineEdit, QPushButton, QStackedWidget, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QComboBox,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QStackedWidget,
+    QVBoxLayout,
+    QWidget,
+)
+
 from peke.gui import theme
+from peke.gui.panes.mcp_page import McpSettingsPage
+from peke.gui.panes.settings_pages import ModelSettingsPage, SchemaSettingsPage, ScraperSettingsPage
 from peke.gui.widgets.console import ExecutionConsole
 from peke.gui.widgets.endpoint_tree import EndpointTree
-from peke.gui.panes.settings_pages import ScraperSettingsPage, ModelSettingsPage, SchemaSettingsPage
 
 
 class TargetInspectionPage(QWidget):
@@ -67,7 +79,9 @@ class Workspace(QStackedWidget):
         self.scraper_page = ScraperSettingsPage()
         self.model_page = ModelSettingsPage()
         self.schema_page = SchemaSettingsPage()
+        self.mcp_page = McpSettingsPage()
         self.addWidget(self.target_page)
         self.addWidget(self.scraper_page)
         self.addWidget(self.model_page)
         self.addWidget(self.schema_page)
+        self.addWidget(self.mcp_page)
