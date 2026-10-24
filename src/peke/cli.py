@@ -297,6 +297,7 @@ def discover(
         raise typer.Exit(2)
     settings = load_settings()
 
+    recommended = None
     if deep:
         from peke.agents import Orchestrator
         from peke.providers import get_provider
@@ -305,6 +306,7 @@ def discover(
         orchestrator = Orchestrator(settings=settings, on_event=_event)
         recon_result = orchestrator.run_reconnaissance(url, subagent_provider=prov)
         hints_data = recon_result.bundle.get("endpoints", [])
+        recommended = recon_result.synthesis.get("recommended")
         console.print(f"[green]Deep discovery completed (Run ID: {recon_result.run_id}).[/green]")
     else:
         hints = run_rea(url, settings, lambda event: _event(event))
@@ -322,6 +324,11 @@ def discover(
         "mode": "auto",
         "max_pages": 1,
     }
+    if recommended:  # draft suggestion only: review URL, params and item_path before running
+        draft.update({"url": recommended["url"], "params": recommended.get("params", {}),
+                      "item_path": recommended.get("item_path"), "schema_name": recommended["schema_name"],
+                      "mode": "api"})
+        draft["name"] = f"Reverse-engineered: {parsed.netloc}"
     try:
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(yaml.safe_dump(draft, sort_keys=False, allow_unicode=True), encoding="utf-8")
@@ -333,6 +340,43 @@ def discover(
         raise typer.Exit(2) from exc
     console.print(f"[green]Draft profile saved:[/green] {out}")
     console.print(f"Returned {len(hints_data)} endpoint hint(s). Review all findings before use.")
+
+
+@app.command()
+def ask(
+    prompt: str = typer.Argument(..., help="Your question or task. It may contain URLs."),
+    out: Path | None = typer.Option(None, "-o", "--output", help="Save the full result as JSON"),
+    no_search: bool = typer.Option(False, "--no-search", help="Skip search; use only links in the prompt"),
+    searxng: str | None = typer.Option(None, "--searxng", help="SearXNG base URL (default: SEARXNG_URL or local)"),
+    deep: bool | None = typer.Option(None, "--deep/--no-deep", help="REA + subagent endpoint discovery (auto if asked for)"),
+    depth: int = typer.Option(0, "--depth", min=0, help="Follow relevant links this many levels"),
+    max_sources: int = typer.Option(0, "--max-sources", min=0, help="0 = unlimited"),
+    stealth: bool = typer.Option(False, "--stealth", help="Use the stealth fetcher"),
+    allow_cloud: bool = typer.Option(False, "--allow-cloud", help="Allow a configured cloud provider to read page text"),
+) -> None:
+    """Situation-aware research: search via SearXNG, else scrape links from your prompt, then REA + answer."""
+    from peke.research import research
+
+    settings = load_settings()
+    result = research(prompt, settings, use_search=not no_search, searxng_url=searxng, deep=deep, depth=depth,
+                      max_sources=max_sources, stealth=stealth, allow_cloud=allow_cloud, on_event=_event)
+    if result.answer:
+        console.print(f"\n[bold]{result.answer.get('answer', '')}[/bold]")
+        if result.answer.get("gaps"):
+            console.print(f"[yellow]Gaps:[/yellow] {result.answer['gaps']}")
+    ok = [s for s in result.sources if s.status == "ok"]
+    for i, s in enumerate(ok[:10], 1):
+        console.print(f"\n[cyan][{i}] {s.title}[/cyan] ({s.via}, score {s.score})\n{s.url}", markup=True, highlight=False)
+        if not result.answer:
+            console.print(s.excerpt, markup=False)
+    for note in result.notes:
+        console.print(f"[yellow]{note}[/yellow]")
+    if out:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps(result.to_dict(), indent=2, ensure_ascii=False, default=str), encoding="utf-8")
+        console.print(f"[green]Saved:[/green] {out}")
+    if not ok:
+        raise typer.Exit(1)
 
 
 @app.command()

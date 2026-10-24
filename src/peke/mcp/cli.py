@@ -6,6 +6,8 @@ import sys
 from pathlib import Path
 
 import typer
+
+from peke import __version__
 from rich.console import Console
 from rich.table import Table
 
@@ -89,7 +91,7 @@ def install_command(
             console.print("Use 'peke mcp print-config' to get manual registration snippets.")
             raise typer.Exit()
 
-    console.print("[bold]Peke MCP Agent Registration (0.2.0)[/bold]")
+    console.print(f"[bold]Peke MCP Agent Registration ({__version__})[/bold]")
     console.print(f"Scope: {scope} | Transport: {transport}")
 
     for reg in target_registrars:

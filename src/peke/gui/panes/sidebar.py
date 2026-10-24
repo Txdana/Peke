@@ -1,5 +1,5 @@
 """Collapsible navigation rail for Peke."""
-from PySide6.QtCore import QEasingCurve, QPropertyAnimation
+from PySide6.QtCore import QEasingCurve, QPropertyAnimation, QSize
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from peke.banner import rea_available
@@ -10,11 +10,12 @@ from peke.gui.widgets.vram_card import VramCard
 
 NAV_ITEMS = [
     ("Target Inspection (REA)", "target"),
+    ("Search & Research", "search"),
     ("Stealth Scraper", "scraper"),
     ("Providers & Models", "model"),
-    ("Sub-Agents (Deep Recon)", "target"),
+    ("Sub-Agents (Deep Recon)", "agents"),
     ("JSON Schemas", "schema"),
-    ("Agent Access (MCP)", "target"),
+    ("Agent Access (MCP)", "plug"),
 ]
 
 
@@ -71,7 +72,7 @@ class Sidebar(QFrame):
             button.setCheckable(True)
             button.setChecked(index == 0)
             button.setIcon(svg_icon(icon, theme.TERRACOTTA if index == 0 else theme.MUTED_TEXT))
-            button.setIconSize(button.iconSize().expandedTo(button.iconSize()))
+            button.setIconSize(QSize(18, 18))
             button.setMinimumHeight(44)
             button.setAccessibleName(label)
             self.buttons.append(button)

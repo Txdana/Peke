@@ -1,6 +1,6 @@
 # Third-party notices
 
-Peke depends on third-party projects. Their licenses apply to those components and are not replaced by Peke's MIT license. Consult the installed distribution and upstream project for the exact license text and version shipped with your environment.
+Peke depends on third-party projects. Their licenses apply to those components and are not replaced by Peke's Apache-2.0 license. Consult the installed distribution and upstream project for the exact license text and version shipped with your environment.
 
 - **Scrapling** — fetch and parsing library; consult its upstream repository and package license.
 - **llama-cpp-python / llama.cpp** — Python bindings and native inference runtime; consult each upstream license and the model's separate license.

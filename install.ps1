@@ -4,7 +4,8 @@ param(
     [switch]$NoModifyPath,
     [switch]$DryRun,
     [switch]$Yes,
-    [switch]$Uninstall
+    [switch]$Uninstall,
+    [switch]$FromSource
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
@@ -12,6 +13,7 @@ $Repo = "Txdana/Peke"
 
 Write-Host "Peke release installer"
 Write-Host "Verifies the release wheel and hash-locked runtime requirements before installation."
+Write-Host "The Peke wheel bundles SearXNG for local search; Docker is not required."
 Write-Host "No administrator elevation is used; model weights are never downloaded."
 
 if ($Uninstall) {
@@ -38,12 +40,34 @@ if (-not $python) { throw "Python 3.10+ is required. Install Python for your use
 $versionText = & $python.Source -c "import sys; print('%s.%s' % sys.version_info[:2])"
 if ($LASTEXITCODE -ne 0 -or [version]$versionText -lt [version]"3.10") { throw "Python 3.10+ is required." }
 if ($DryRun) {
-    $target = if ($PEKE_VERSION) { "version $PEKE_VERSION" } else { "latest stable release" }
-    Write-Host "Dry run: would download $target, verify SHA256SUMS and locked requirements, then install with pipx."
+    if ($FromSource) {
+        Write-Host "Dry run: would install the current source tree with pipx using the GUI extra and bundled SearXNG dependencies."
+    } else {
+        $target = if ($PEKE_VERSION) { "version $PEKE_VERSION" } else { "latest stable release" }
+        Write-Host "Dry run: would download $target, verify SHA256SUMS and locked requirements, then install with pipx."
+    }
     return
 }
 if (-not (Get-Command pipx -ErrorAction SilentlyContinue)) {
     throw "pipx is required. Install it for your user with: python -m pip install --user pipx"
+}
+
+if ($FromSource) {
+    Write-Host "Installing this Peke source tree, including bundled SearXNG, into the user-level pipx environment."
+    Push-Location $PSScriptRoot
+    try {
+        pipx install --force --editable '.[gui]'
+        if ($LASTEXITCODE -ne 0) { throw "pipx source installation failed with exit code $LASTEXITCODE" }
+    } finally {
+        Pop-Location
+    }
+    if (-not $NoModifyPath) {
+        Write-Host "If peke is not recognized, add your pipx binary directory to the user PATH and open a new terminal."
+    }
+    if (Get-Command peke -ErrorAction SilentlyContinue) { peke desktop install }
+    Write-Host "Installed current source. Start Peke with: peke launch"
+    Write-Host "Source mode resolves dependencies from the configured package index; use the default mode for verified release assets."
+    return
 }
 
 if ($PEKE_VERSION) {

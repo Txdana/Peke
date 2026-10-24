@@ -2,6 +2,19 @@
 
 All notable changes to Peke are documented here. This format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow Semantic Versioning.
 
+## Unreleased
+
+- Bundled the SearXNG source and runtime dependencies for a private loopback-only local service on Windows x64; Docker is no longer required. Added a managed process lifecycle, JSON API readiness checks, per-user secret/settings, and AGPL source/licence notices.
+- Hardened search URL/configuration validation, bounded pagination, skipped malformed result URLs, added regression tests, and patched SearXNG’s optional Valkey diagnostic import for native Windows compatibility.
+- Corrected package/application version drift and aligned license statements with Apache-2.0.
+- Added TOML-reader compatibility for Python 3.10 and retained a deprecated compatibility alias for earlier REA integrations.
+- Hardened file-based credential fallback with private permissions, atomic writes, and symlink refusal.
+
+- New `peke ask`: situation-aware research (SearXNG search, fallback to prompt links, relevance ranking, link-following, REA/subagent deep discovery, cited answers). See docs/ask.md.
+- Added Probe and Schema subagents; deep discovery now fetches JS bundles and writes a reverse-engineered draft profile.
+- Pipeline: `max_pages` now paginates (next link, `page`, `offset`/`limit`); JSON lists validate every item; Markdown output built with one dump per record.
+- `REQUEST_DELAY_SECONDS` is now enforced per host; response, probe and script caps are configurable (`0` = unlimited); timeout and MCP caps raised.
+
 ## [0.2.0] - 2026-10-24
 
 ### Added

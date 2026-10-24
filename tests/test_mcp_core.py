@@ -130,5 +130,7 @@ def test_model_lock_contention(tmp_path, monkeypatch):
 def test_build_server_returns_configured_instance():
     server = build_server()
     assert server.name == "peke"
-    assert server.version == "0.2.0"
+    from peke import __version__
+
+    assert server.version == __version__
     assert "SAFETY NOTICE" in server.instructions

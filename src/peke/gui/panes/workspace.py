@@ -1,4 +1,4 @@
-"""Target inspection workspace and phase-two placeholder pages."""
+"""Workspace page registry for the Peke desktop application."""
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QComboBox,
@@ -16,6 +16,7 @@ from peke.gui import theme
 from peke.gui.panes.mcp_page import McpSettingsPage
 from peke.gui.panes.providers_pane import ProvidersPane
 from peke.gui.panes.settings_pages import SchemaSettingsPage, ScraperSettingsPage
+from peke.gui.panes.search_page import SearchPage
 from peke.gui.panes.subagents_pane import SubagentsPane
 from peke.gui.widgets.console import ExecutionConsole
 from peke.gui.widgets.endpoint_tree import EndpointTree
@@ -31,8 +32,8 @@ class TargetInspectionPage(QWidget):
         root.setContentsMargins(20, 18, 20, 18)
         root.setSpacing(14)
         top = QHBoxLayout()
-        self.url_input = QLineEdit("https://example.com")
-        self.url_input.setPlaceholderText("Enter target URL or load a profile")
+        self.url_input = QLineEdit()
+        self.url_input.setPlaceholderText("Enter an authorized target URL (https://…)")
         self.url_input.setAccessibleName("Target URL")
         self.url_input.setStyleSheet("font-family:'IBM Plex Mono',monospace;border-radius:18px")
         self.fetcher = QComboBox()
@@ -78,12 +79,14 @@ class Workspace(QStackedWidget):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self.target_page = TargetInspectionPage()
+        self.search_page = SearchPage()
         self.scraper_page = ScraperSettingsPage()
         self.providers_page = ProvidersPane()
         self.subagents_page = SubagentsPane()
         self.schema_page = SchemaSettingsPage()
         self.mcp_page = McpSettingsPage()
         self.addWidget(self.target_page)
+        self.addWidget(self.search_page)
         self.addWidget(self.scraper_page)
         self.addWidget(self.providers_page)
         self.addWidget(self.subagents_page)

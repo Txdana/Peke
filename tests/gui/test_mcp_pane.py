@@ -42,7 +42,7 @@ def test_main_window_navigates_to_mcp_page(qtbot, tmp_path, monkeypatch):
     window = MainWindow()
     qtbot.addWidget(window)
 
-    assert window.workspace.count() == 6
-    window.sidebar.buttons[5].click()
-    assert window.workspace.currentIndex() == 5
+    assert window.workspace.count() == 7
+    window.sidebar.buttons[6].click()
+    assert window.workspace.currentIndex() == 6
     assert isinstance(window.workspace.currentWidget(), McpSettingsPage)

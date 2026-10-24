@@ -1,4 +1,4 @@
-"""Phase 3 profile, model and schema settings pages."""
+"""Profile, model, and schema configuration pages."""
 import json
 from pathlib import Path
 
@@ -49,7 +49,8 @@ class ScraperSettingsPage(QWidget):
         self.max_pages.setValue(1)
         self.headers = QTableWidget(0, 2)
         self.headers.setHorizontalHeaderLabels(["Header", "Value"])
-        self.profile_url = QLineEdit("https://example.com")
+        self.profile_url = QLineEdit()
+        self.profile_url.setPlaceholderText("Target URL (https://…)")
         form.addRow("Target URL", self.profile_url)
         form.addRow("Fetcher", self.fetcher)
         form.addRow("Request delay (seconds)", self.delay)
