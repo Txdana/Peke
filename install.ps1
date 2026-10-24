@@ -49,7 +49,27 @@ if ($DryRun) {
     return
 }
 if (-not (Get-Command pipx -ErrorAction SilentlyContinue)) {
-    throw "pipx is required. Install it for your user with: python -m pip install --user pipx"
+    Write-Host "pipx was not found; installing it for your user (no administrator rights needed)..."
+    & $python.Source -m pip install --user --quiet pipx
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not install pipx automatically. Install it yourself with: python -m pip install --user pipx"
+    }
+    $script:PekePython = $python.Source
+    # Until the user's PATH is refreshed in a new terminal, route 'pipx' through the Python module
+    # so the rest of this installer (and this session) works immediately.
+    function pipx { & $script:PekePython -m pipx @args }
+    if (-not $NoModifyPath) {
+        & $python.Source -m pipx ensurepath | Out-Null
+    }
+    $pipxBin = (& $python.Source -m pipx environment --value PIPX_BIN_DIR 2>$null)
+    if ($pipxBin -and (Test-Path -LiteralPath "$pipxBin") -and (($env:Path -split ';') -notcontains "$pipxBin")) {
+        $env:Path = "$pipxBin;$env:Path"   # current session only; ensurepath handles future terminals
+    }
+    & $python.Source -m pipx --version | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "pipx was installed but could not be started. Open a new terminal and run this installer again."
+    }
+    Write-Host "pipx installed."
 }
 
 if ($FromSource) {
