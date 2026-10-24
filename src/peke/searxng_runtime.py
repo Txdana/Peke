@@ -136,7 +136,8 @@ def _clear_state() -> None:
 def _answering_token() -> str | None:
     """Per-launch token reported by whatever answers on the service port, if it is ours."""
     try:
-        with urllib.request.urlopen(BASE_URL + "/config", timeout=1.5) as resp:  # noqa: S310 (fixed loopback URL)
+        # BASE_URL is hardcoded loopback URL http://127.0.0.1:8888
+        with urllib.request.urlopen(BASE_URL + "/config", timeout=1.5) as resp:  # nosec B310
             name = str(json.loads(resp.read(1024 * 1024)).get("instance_name", ""))
     except Exception:
         return None
@@ -195,11 +196,23 @@ def _start_locked(timeout: float) -> dict[str, Any]:
     if _SERVER_PROCESS is not None and _SERVER_PROCESS.poll() is not None:
         _clear_process_handle()
 
+    # If Peke already owns a running or adopted process, wait for it to be ready
+    owned_process = (_SERVER_PROCESS is not None and _SERVER_PROCESS.poll() is None) or _adopted_state() is not None
+    if owned_process:
+        retry_deadline = time.monotonic() + 5.0
+        while time.monotonic() < retry_deadline:
+            try:
+                status = _is_ready(timeout=1.0)
+                if status.get("available"):
+                    return {"url": BASE_URL, "already_running": True, "managed_by_peke": True, "status": status}
+            except Exception:
+                pass
+            time.sleep(0.2)
+
     try:
         status = _is_ready()
         if status.get("available"):
-            owned = (_SERVER_PROCESS is not None and _SERVER_PROCESS.poll() is None) or _adopted_state() is not None
-            return {"url": BASE_URL, "already_running": True, "managed_by_peke": owned, "status": status}
+            return {"url": BASE_URL, "already_running": True, "managed_by_peke": False, "status": status}
     except Exception:
         pass
 

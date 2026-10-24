@@ -41,6 +41,7 @@ def test_load_settings_reads_rea_command_from_user_config(tmp_path, monkeypatch)
 
 def test_settings_file_is_private_and_symlinks_are_refused(tmp_path, monkeypatch):
     import os
+
     import pytest
 
     path = tmp_path / "config" / "settings.json"

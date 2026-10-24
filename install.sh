@@ -8,11 +8,13 @@ PEKE_VERSION="${PEKE_VERSION:-}"
 NO_MODIFY_PATH=0
 DRY_RUN=0
 YES=0
+FROM_SOURCE=0
 for arg in "$@"; do
   case "$arg" in
     --no-modify-path) NO_MODIFY_PATH=1 ;;
     --dry-run) DRY_RUN=1 ;;
     --yes) YES=1 ;;
+    --from-source) FROM_SOURCE=1 ;;
     --uninstall)
       printf '%s\n' "Uninstall Peke from pipx and remove desktop integration?"
       if [ "$YES" -ne 1 ]; then
@@ -48,15 +50,34 @@ python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3,10) else 1)
   printf '%s\n' "Python 3.10+ is required." >&2; exit 1;
 }
 if [ "$DRY_RUN" -eq 1 ]; then
-  if [ -n "$PEKE_VERSION" ]; then version="$PEKE_VERSION"; else version="latest stable release"; fi
-  printf 'Dry run: would download the %s GitHub release, verify the wheel and hash-locked requirements, then install with pipx.\n' "$version"
+  if [ "$FROM_SOURCE" -eq 1 ]; then
+    printf '%s\n' "Dry run: would install the current source tree with pipx using the gui extra."
+  else
+    if [ -n "$PEKE_VERSION" ]; then version="$PEKE_VERSION"; else version="latest stable release"; fi
+    printf 'Dry run: would download the %s GitHub release, verify the wheel and hash-locked requirements, then install with pipx.\n' "$version"
+  fi
   exit 0
 fi
-command -v curl >/dev/null 2>&1 || { printf '%s\n' "curl is required." >&2; exit 1; }
+
 command -v pipx >/dev/null 2>&1 || {
   printf '%s\n' "pipx is required. Install it for your user with: python3 -m pip install --user pipx" >&2
   exit 1
 }
+
+if [ "$FROM_SOURCE" -eq 1 ]; then
+  printf '%s\n' "Installing Peke from local source tree using pipx..."
+  pipx install --force --editable '.[gui]'
+  if [ "$NO_MODIFY_PATH" -eq 0 ]; then
+    case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) printf '%s\n' "If peke is not found, add $HOME/.local/bin to PATH and reopen your terminal." ;; esac
+  fi
+  if command -v peke >/dev/null 2>&1; then
+    peke desktop install || true
+  fi
+  printf '\n%s\n' "Installed Peke from source. Start Peke with: peke launch"
+  exit 0
+fi
+
+command -v curl >/dev/null 2>&1 || { printf '%s\n' "curl is required for downloading releases." >&2; exit 1; }
 
 if [ -n "$PEKE_VERSION" ]; then
   PEKE_VERSION="${PEKE_VERSION#v}"
@@ -66,8 +87,19 @@ else
 fi
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/peke-install.XXXXXX")"
 trap 'rm -rf "$TMP_DIR"' EXIT HUP INT TERM
-curl --fail --location --silent --show-error --proto '=https' --tlsv1.2 "$API_URL" -o "$TMP_DIR/release.json" || {
-  printf '%s\n' "Could not retrieve the requested GitHub release." >&2; exit 1;
+curl --fail --location --silent --show-error --proto '=https' --tlsv1.2 "$API_URL" -o "$TMP_DIR/release.json" 2>/dev/null || {
+  if [ -n "$PEKE_VERSION" ]; then
+    printf '%s\n' "Could not find or access Peke release v$PEKE_VERSION on GitHub." \
+      "Confirm that this tag has a published release on https://github.com/$REPO." \
+      "For source installation, run: git clone https://github.com/$REPO.git && cd Peke && ./install.sh --from-source" >&2
+  else
+    printf '%s\n' "No published Peke release was found on GitHub (the releases page may be empty)." \
+      "For source installation, run:" \
+      "  git clone https://github.com/$REPO.git && cd Peke && ./install.sh --from-source" \
+      "Or install directly with pip:" \
+      "  python3 -m pip install -e '.[gui]'" >&2
+  fi
+  exit 1
 }
 python3 - "$TMP_DIR/release.json" "$TMP_DIR/assets.txt" <<'PY'
 import json, re, sys

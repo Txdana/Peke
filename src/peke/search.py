@@ -86,7 +86,8 @@ class SearxngClient:
             url, headers={"Accept": "application/json", "User-Agent": f"Peke/{__version__}"}
         )
         try:
-            with urllib.request.urlopen(req, timeout=self.timeout) as resp:  # noqa: S310 (user-configured http(s) URL)
+            # Scheme validated in __init__ to only allow http and https
+            with urllib.request.urlopen(req, timeout=self.timeout) as resp:  # nosec B310
                 body = resp.read(MAX_BYTES + 1)
         except urllib.error.HTTPError as exc:
             if exc.code == 403:

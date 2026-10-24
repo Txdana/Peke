@@ -1,8 +1,6 @@
 """Regression tests for the SearXNG API client and local configuration."""
 import json
 import math
-from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
@@ -150,6 +148,7 @@ def test_local_settings_enable_json_and_keep_a_unique_secret(tmp_path, monkeypat
 
 def test_local_service_settings_bind_loopback_and_enable_json(tmp_path, monkeypatch):
     import os
+
     import peke.searxng_runtime as runtime
 
     monkeypatch.setattr(runtime, "_config_dir", lambda: tmp_path / "config")

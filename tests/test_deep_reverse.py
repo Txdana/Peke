@@ -3,7 +3,13 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from peke.agents.probe_agent import ProbeAgent
-from peke.agents.schema_agent import SchemaAgent, field_types, find_items, infer_shape, pagination_hints
+from peke.agents.schema_agent import (
+    SchemaAgent,
+    field_types,
+    find_items,
+    infer_shape,
+    pagination_hints,
+)
 from peke.config import Settings
 
 DATA = {"meta": {"total": 2, "page": 1}, "data": {"results": [{"id": 1, "title": "a", "price": 1.5}, {"id": 2, "title": "b", "price": 2.0}]}}

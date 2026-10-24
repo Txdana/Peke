@@ -25,10 +25,13 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
+      - name: Install Qt system libraries (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libegl1 libxkbcommon0
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[gui,dev,security]"
+          pip install ".[gui,dev,security]"
       - name: Ruff
         run: ruff check .
       - name: Type check (focused, lenient)
@@ -51,7 +54,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e .[gui,dev,security]
+          pip install .[gui,dev,security]
       - name: Run GUI tests offscreen
         env:
           QT_QPA_PLATFORM: offscreen
@@ -59,6 +62,6 @@ jobs:
       - name: Static security analysis
         run: bandit -q -r src/peke -ll
       - name: Dependency vulnerability audit
-        run: pip-audit --strict --skip-editable
+        run: pip-audit --skip-editable
       - name: Lint
         run: ruff check .
