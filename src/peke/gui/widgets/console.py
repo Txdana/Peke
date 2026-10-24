@@ -84,10 +84,12 @@ class ExecutionConsole(QFrame):
             if selected != "all" and level != selected:
                 continue
             timestamp_end = line.find("]") + 1
-            stamp_fmt = QTextCharFormat(); stamp_fmt.setForeground(QColor(theme.CONSOLE_TIMESTAMP))
+            stamp_fmt = QTextCharFormat()
+            stamp_fmt.setForeground(QColor(theme.CONSOLE_TIMESTAMP))
             cursor.insertText(line[:timestamp_end], stamp_fmt)
             rest = line[timestamp_end:]
-            tag_fmt = QTextCharFormat(); tag_fmt.setForeground(QColor(theme.CONSOLE_HIGHLIGHT))
+            tag_fmt = QTextCharFormat()
+            tag_fmt.setForeground(QColor(theme.CONSOLE_HIGHLIGHT))
             if rest.startswith(" [") and "]" in rest:
                 end = rest.find("]") + 1
                 cursor.insertText(rest[:end], tag_fmt)

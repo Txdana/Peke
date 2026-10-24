@@ -53,5 +53,6 @@ out.json
 *.output.json
 *.pem
 *.key
-models/
+/models/
+!src/peke/models/
 output/

@@ -1,4 +1,4 @@
-"""Environment-backed application configuration."""
+"""Environment-backed application configuration with structured provider and update settings."""
 import json
 import logging
 import math
@@ -20,6 +20,13 @@ def user_settings_path() -> Path:
     return Path(user_config_dir("peke", "Peke")) / "settings.json"
 
 
+def user_config_toml_path() -> Path:
+    """Return optional config.toml path in user config directory."""
+    from platformdirs import user_config_dir
+
+    return Path(user_config_dir("peke", "Peke")) / "config.toml"
+
+
 def save_user_settings(values: dict[str, Any], *, merge: bool = True) -> Path:
     """Persist settings atomically, optionally preserving settings owned by other pages."""
     path = user_settings_path()
@@ -31,13 +38,10 @@ def save_user_settings(values: dict[str, Any], *, merge: bool = True) -> Path:
             if isinstance(loaded, dict):
                 existing = loaded
         except (OSError, json.JSONDecodeError):
-            # A corrupt settings file is replaced with the explicitly saved values.
             existing = {}
     existing.update(values)
     temporary_name: str | None = None
     try:
-        # Use a unique file in the same directory to avoid following a pre-created .tmp
-        # symlink and preserve atomic replacement on the same filesystem.
         with tempfile.NamedTemporaryFile(
             mode="w", encoding="utf-8", newline="\n", dir=path.parent,
             prefix=".settings-", suffix=".tmp", delete=False,
@@ -85,6 +89,20 @@ class Settings:
     mcp_max_fetch_bytes: int = 5_242_880
     mcp_max_pages_per_call: int = 5
     mcp_http_port: int = 8765
+    # Provider settings
+    provider_main_kind: str = "local_builtin"
+    provider_main_auto_download: bool = True
+    provider_main_repo: str = "richardyoung/Qwen2.5-7B-Instruct-abliterated-GGUF"
+    provider_main_file: str = "Qwen2.5-7B-Instruct-abliterated-Q4_K_M.gguf"
+    provider_subagents_mode: str = "auto"
+    subagents_enabled: bool = True
+    subagents_max_parallel_local: int = 1
+    subagents_step_timeout_seconds: float = 15.0
+    subagents_max_steps: int = 3
+    # Update settings
+    updates_auto_check: bool = True
+    updates_channel: str = "stable"
+    updates_last_check_timestamp: float = 0.0
 
     def __post_init__(self) -> None:
         """Reject unsafe or nonsensical resource settings before work starts."""
@@ -114,10 +132,20 @@ class Settings:
             raise ConfigError("MCP_MAX_PAGES_PER_CALL must be between 1 and 100")
         if self.mcp_http_port < 1024 or self.mcp_http_port > 65535:
             raise ConfigError("MCP_HTTP_PORT must be between 1024 and 65535")
+        if self.provider_subagents_mode not in {"auto", "per_role"}:
+            raise ConfigError("PROVIDER_SUBAGENTS_MODE must be 'auto' or 'per_role'")
+        if self.updates_channel not in {"stable", "prerelease"}:
+            raise ConfigError("UPDATES_CHANNEL must be 'stable' or 'prerelease'")
 
     def require_model(self) -> Path:
         """Return an existing model path or explain how to configure one."""
         if self.model_path is None or not self.model_path.is_file():
+            if self.provider_main_kind == "local_builtin":
+                from peke.models.manager import ModelManager
+                mgr = ModelManager()
+                active = mgr.get_active_model()
+                if active and Path(active.local_path).is_file():
+                    return Path(active.local_path)
             raise ConfigError(
                 "A local GGUF model is required for LLM extraction. Set MODEL_PATH in your "
                 ".env file or user settings to the full path of a llama.cpp-compatible .gguf file."
@@ -128,9 +156,10 @@ class Settings:
 
 
 def load_settings() -> Settings:
-    """Load settings from the environment, reading .env if present."""
+    """Load settings from environment, TOML config, and user settings JSON with legacy migration."""
     load_dotenv()
     config_values: dict[str, object] = {}
+
     try:
         config_path = user_settings_path()
         if config_path.is_file():
@@ -140,8 +169,45 @@ def load_settings() -> Settings:
     except (ImportError, OSError, json.JSONDecodeError) as exc:
         logger.debug("Could not read user settings file: %s", exc)
 
+    toml_path = user_config_toml_path()
+    if toml_path.is_file():
+        try:
+            import tomllib
+            toml_data = tomllib.loads(toml_path.read_text(encoding="utf-8"))
+            if isinstance(toml_data, dict):
+                providers_main = toml_data.get("providers", {}).get("main", {})
+                if "kind" in providers_main and "provider_main_kind" not in config_values:
+                    config_values["provider_main_kind"] = providers_main["kind"]
+                if "auto_download" in providers_main and "provider_main_auto_download" not in config_values:
+                    config_values["provider_main_auto_download"] = providers_main["auto_download"]
+                if "repo" in providers_main and "provider_main_repo" not in config_values:
+                    config_values["provider_main_repo"] = providers_main["repo"]
+                if "file" in providers_main and "provider_main_file" not in config_values:
+                    config_values["provider_main_file"] = providers_main["file"]
+
+                subagents_cfg = toml_data.get("subagents", {})
+                if "enabled" in subagents_cfg and "subagents_enabled" not in config_values:
+                    config_values["subagents_enabled"] = subagents_cfg["enabled"]
+                if "step_timeout_seconds" in subagents_cfg and "subagents_step_timeout_seconds" not in config_values:
+                    config_values["subagents_step_timeout_seconds"] = subagents_cfg["step_timeout_seconds"]
+
+                updates_cfg = toml_data.get("updates", {})
+                if "auto_check" in updates_cfg and "updates_auto_check" not in config_values:
+                    config_values["updates_auto_check"] = updates_cfg["auto_check"]
+                if "channel" in updates_cfg and "updates_channel" not in config_values:
+                    config_values["updates_channel"] = updates_cfg["channel"]
+        except Exception as exc:
+            logger.debug("Could not read config.toml: %s", exc)
+
     def value(key: str, default: object) -> str:
-        return os.getenv(key, str(config_values.get(key, default)))
+        env_val = os.getenv(key)
+        if env_val is not None:
+            return env_val
+        if key in config_values:
+            return str(config_values[key])
+        if key.lower() in config_values:
+            return str(config_values[key.lower()])
+        return str(default)
 
     def integer(key: str, default: int) -> int:
         try:
@@ -178,10 +244,16 @@ def load_settings() -> Settings:
     if not math.isfinite(temperature):
         raise ConfigError("TEMPERATURE must be a finite number")
     temperature = max(0.0, min(0.1, temperature))
+
+    if "MODEL_PATH" in config_values and "provider_main_kind" not in config_values:
+        logger.info("Migrated legacy MODEL_PATH setting into provider_main configuration.")
+
     return Settings(
         model_path=Path(model).expanduser() if model else None,
-        n_ctx=integer("N_CTX", 8192), n_gpu_layers=integer("N_GPU_LAYERS", 0),
-        n_threads=integer("N_THREADS", 0), max_input_chars=integer("MAX_INPUT_CHARS", 24000),
+        n_ctx=integer("N_CTX", 8192),
+        n_gpu_layers=integer("N_GPU_LAYERS", 0),
+        n_threads=integer("N_THREADS", 0),
+        max_input_chars=integer("MAX_INPUT_CHARS", 24000),
         temperature=temperature,
         request_delay_seconds=number("REQUEST_DELAY_SECONDS", 1.0),
         output_dir=Path(value("OUTPUT_DIR", "output")),
@@ -199,8 +271,19 @@ def load_settings() -> Settings:
         mcp_max_fetch_bytes=integer("MCP_MAX_FETCH_BYTES", 5_242_880),
         mcp_max_pages_per_call=integer("MCP_MAX_PAGES_PER_CALL", 5),
         mcp_http_port=integer("MCP_HTTP_PORT", 8765),
+        provider_main_kind=value("PROVIDER_MAIN_KIND", "local_builtin").strip(),
+        provider_main_auto_download=boolean("PROVIDER_MAIN_AUTO_DOWNLOAD", True),
+        provider_main_repo=value("PROVIDER_MAIN_REPO", "richardyoung/Qwen2.5-7B-Instruct-abliterated-GGUF").strip(),
+        provider_main_file=value("PROVIDER_MAIN_FILE", "Qwen2.5-7B-Instruct-abliterated-Q4_K_M.gguf").strip(),
+        provider_subagents_mode=value("PROVIDER_SUBAGENTS_MODE", "auto").strip().lower(),
+        subagents_enabled=boolean("SUBAGENTS_ENABLED", True),
+        subagents_max_parallel_local=integer("SUBAGENTS_MAX_PARALLEL_LOCAL", 1),
+        subagents_step_timeout_seconds=number("SUBAGENTS_STEP_TIMEOUT_SECONDS", 15.0),
+        subagents_max_steps=integer("SUBAGENTS_MAX_STEPS", 3),
+        updates_auto_check=boolean("UPDATES_AUTO_CHECK", True),
+        updates_channel=value("UPDATES_CHANNEL", "stable").strip().lower(),
+        updates_last_check_timestamp=number("UPDATES_LAST_CHECK_TIMESTAMP", 0.0),
     )
 
 
-# Compatibility alias for older callers.
 get_settings = load_settings

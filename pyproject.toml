@@ -4,11 +4,18 @@ build-backend = "hatchling.build"
 
 [project]
 name = "peke"
-version = "0.2.0"
+version = "0.3.0"
 description = "Local-first open-source data extraction pipeline"
 readme = "README.md"
 requires-python = ">=3.10"
-license = "MIT"
+license = "Apache-2.0"
+classifiers = [
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
 dependencies = [
     "scrapling[fetchers]",
     "llama-cpp-python",
@@ -20,6 +27,11 @@ dependencies = [
     "platformdirs",
     "mcp>=2.3,<3",
     "filelock",
+    "huggingface-hub",
+    "keyring",
+    "httpx",
+    "tomli_w",
+    "packaging",
 ]
 
 [project.optional-dependencies]
@@ -63,6 +75,8 @@ include = [
   "/profiles",
   "/README.md",
   "/LICENSE",
+  "/NOTICE",
+  "/THIRD_PARTY_NOTICES.md",
   "/CHANGELOG.md",
   "/CONTRIBUTING.md",
   "/SECURITY.md",

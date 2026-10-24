@@ -16,8 +16,11 @@ Write-Host "No administrator elevation is used; model weights are never download
 
 if ($Uninstall) {
     if (-not $Yes) {
-        $answer = Read-Host "Uninstall Peke from pipx? User configuration is retained [y/N]"
+        $answer = Read-Host "Uninstall Peke from pipx and remove desktop integration? User configuration is retained [y/N]"
         if ($answer -notin @("y", "Y")) { return }
+    }
+    if (Get-Command peke -ErrorAction SilentlyContinue) {
+        peke desktop uninstall
     }
     if (Get-Command pipx -ErrorAction SilentlyContinue) {
         pipx uninstall peke
@@ -25,7 +28,7 @@ if ($Uninstall) {
     } else {
         Write-Host "pipx was not found; no package was removed."
     }
-    Write-Host "Peke package removed if installed. User configuration was retained."
+    Write-Host "Peke package and desktop integration removed if installed. User configuration was retained."
     return
 }
 
@@ -91,6 +94,9 @@ try {
 }
 if (-not $NoModifyPath) {
     Write-Host "If peke is not recognized, add your pipx binary directory to the user PATH and open a new terminal."
+}
+if (Get-Command peke -ErrorAction SilentlyContinue) {
+    peke desktop install
 }
 Write-Host "Installed. Start Peke with: peke launch"
 Write-Host "User configuration is managed by Peke and is not removed by uninstall."

@@ -153,5 +153,5 @@ class TokenSparkline(QWidget):
             y = 18 + height * (1 - value / maximum)
             points.append((int(x), int(y)))
         painter.setPen(QPen(QGuiApplication.palette().color(QPalette.ColorRole.Highlight), 2))
-        for first, second in zip(points, points[1:]):
+        for first, second in zip(points, points[1:], strict=False):
             painter.drawLine(first[0], first[1], second[0], second[1])
