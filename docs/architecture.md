@@ -11,7 +11,7 @@ Scrapling fetcher ── FetchResult (raw HTML/text or JSON)
        │
        ├── clean JSON ──> Pydantic validation
        │
-       └── deterministic parsing fails ──> llama-cpp-python
+       └── deterministic parsing fails ──> llama-server (standalone llama.cpp)
                                              │ constrained JSON output
                                              ▼
                                       Pydantic validation
@@ -19,6 +19,8 @@ Scrapling fetcher ── FetchResult (raw HTML/text or JSON)
        ▼
 PipelineResult ──> JSON / Markdown / GUI output
 ```
+
+The standalone `llama-server` process is launched with argument arrays, binds to loopback by default, and is health-checked before use. Its executable is discovered from `LLAMA_SERVER_PATH`, `PATH`, or Peke's application-managed runtime directory. Normal package installation does not compile llama.cpp or install `llama-cpp-python`.
 
 The `src/` layout keeps importable package code under `src/peke`. The CLI remains usable without the GUI extra. PySide6 is imported only for GUI launch. The GUI's worker object runs pipeline work in a `QThread` and emits events back to the UI thread. REA is optional and its output is treated as untrusted hints. No telemetry or background daemon is part of the design.
 

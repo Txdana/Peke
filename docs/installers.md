@@ -27,7 +27,7 @@ For a checkout or extracted source archive, Windows also supports `./install.ps1
 
 ## Integrity limitations
 
-The checksum manifest and assets are delivered by the same GitHub Release. This detects corruption or mismatched assets, but does not independently authenticate the release against a compromised repository account or release pipeline. The lock covers runtime dependencies and hashes, but source builds can still require build-system dependencies; `llama-cpp-python` may need a compatible prebuilt wheel or a local C/C++ toolchain. The installer does not bootstrap Python or pipx.
+The checksum manifest and assets are delivered by the same GitHub Release. This detects corruption or mismatched assets, but does not independently authenticate the release against a compromised repository account or release pipeline. The lock covers runtime dependencies and hashes, but source builds can still require build-system dependencies. The normal Peke install does not install or compile `llama-cpp-python`; local inference uses a separately installed standalone `llama-server` executable. The installer does not bootstrap Python or pipx.
 
 The in-app `peke update` command remains a convenience wrapper around `pipx upgrade peke` and uses the configured package index; it does not use the release-specific lock. To update with the verified release artifacts, rerun the bootstrap script with `PEKE_VERSION` set to the target published version. Manual install from PyPI remains available:
 

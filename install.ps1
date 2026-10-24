@@ -18,6 +18,7 @@ Write-Host "Peke release installer"
 Write-Host "Verifies the release wheel and hash-locked runtime requirements before installation."
 Write-Host "The Peke wheel bundles SearXNG for local search; Docker is not required."
 Write-Host "No administrator elevation is used; model weights are never downloaded."
+Write-Host "Local inference uses standalone llama-server; llama-cpp-python is not installed or compiled."
 
 if ($Uninstall) {
     if (-not $Yes) {
@@ -77,6 +78,7 @@ if (-not (Get-Command pipx -ErrorAction SilentlyContinue)) {
 
 if ($FromSource) {
     Write-Host "Installing this Peke source tree, including bundled SearXNG, into the user-level pipx environment."
+    Write-Host "This step installs Python dependencies only; it does not build llama.cpp or download model weights."
     Push-Location $PSScriptRoot
     try {
         pipx install --force --editable '.[gui]'

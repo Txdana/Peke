@@ -40,6 +40,8 @@ app.add_typer(mcp_app, name="mcp", help="Peke MCP server management and agent re
 
 models_app = typer.Typer(name="models", help="Managed GGUF model downloads and selection")
 app.add_typer(models_app, name="models")
+ai_app = typer.Typer(name="ai", help="Local llama.cpp runtime and model diagnostics")
+app.add_typer(ai_app, name="ai")
 
 desktop_app = typer.Typer(name="desktop", help="OS desktop application integration and launcher shortcuts")
 app.add_typer(desktop_app, name="desktop")
@@ -228,6 +230,78 @@ def schemas_command() -> None:
         console.print(name)
 
 
+
+@app.command("hardware")
+def hardware_command(as_json: bool = typer.Option(False, "--json", help="Output machine-readable JSON")) -> None:
+    """Detect CPU, RAM and visible GPU information without requiring internet access."""
+    from peke.hardware import detect_hardware, recommend_policy
+    profile = detect_hardware()
+    if as_json:
+        console.print_json(json.dumps({"hardware": profile.to_dict(), "recommendation": recommend_policy(profile)}))
+        return
+    table = Table(title="Peke Hardware Profile", show_header=True, header_style="bold")
+    table.add_column("Field", style="bold")
+    table.add_column("Detected value", overflow="fold")
+    table.add_row("Operating system", f"{profile.operating_system} {profile.os_version}")
+    table.add_row("Architecture", profile.architecture)
+    table.add_row("CPU", profile.cpu)
+    table.add_row("Logical cores", str(profile.logical_cores or "Unknown"))
+    table.add_row("RAM total", f"{profile.ram_total_bytes / 1024**3:.1f} GiB" if profile.ram_total_bytes else "Unknown")
+    table.add_row("RAM available", f"{profile.ram_available_bytes / 1024**3:.1f} GiB" if profile.ram_available_bytes else "Unknown")
+    table.add_row("GPUs", "; ".join(f"{g.name} ({g.vendor}, VRAM {g.vram_bytes / 1024**3:.1f} GiB" if g.vram_bytes else f"{g.name} ({g.vendor}, VRAM unknown)" for g in profile.gpus) or "No GPU compute device verified")
+    table.add_row("Confidence", profile.confidence)
+    console.print(table)
+    for warning in profile.warnings:
+        console.print(f"[yellow]Warning:[/yellow] {warning}")
+    console.print("\n[bold]Conservative model recommendation[/bold]")
+    console.print_json(json.dumps(recommend_policy(profile)))
+
+
+@ai_app.command("status")
+def ai_status_command() -> None:
+    """Show whether a model and standalone llama-server executable are configured."""
+    from peke.llama_server import LlamaServer, LlamaServerError
+    settings = load_settings()
+    server = LlamaServer(model=settings.model_path, context=settings.n_ctx)
+    console.print(f"Model: {settings.model_path or 'not configured'}")
+    console.print(f"Model file: {'present' if settings.model_path and settings.model_path.is_file() else 'missing'}")
+    try:
+        console.print(f"llama-server: {server.executable} ({server.version()})")
+    except LlamaServerError as exc:
+        console.print(f"llama-server: unavailable ({exc})")
+    console.print("Runtime health: not tested (use `peke ai test` to perform a live check)")
+
+
+@ai_app.command("recommend")
+def ai_recommend_command(policy: str = typer.Option("automatic", help="automatic, lightweight, or quality")) -> None:
+    """Recommend a conservative model class from detected host resources."""
+    from peke.hardware import detect_hardware, recommend_policy
+    try:
+        recommendation = recommend_policy(detect_hardware(), policy)
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+    console.print_json(json.dumps(recommendation))
+    console.print("This is a heuristic model class, not a verified downloadable artifact or a fit guarantee.")
+
+
+@ai_app.command("test")
+def ai_test_command() -> None:
+    """Start the configured local model, verify its health endpoint, then stop it."""
+    from peke.llama_server import LlamaServer, LlamaServerError
+    settings = load_settings()
+    server = LlamaServer(model=settings.model_path, context=settings.n_ctx)
+    try:
+        console.print(f"llama-server version: {server.version()}")
+        server.start()
+        console.print(f"[green]Health check passed:[/green] {server.base_url}/health")
+    except LlamaServerError as exc:
+        console.print(f"[red]Local runtime test failed:[/red] {exc}")
+        raise typer.Exit(1) from exc
+    finally:
+        server.stop()
+
+
 @app.command()
 def doctor() -> None:
     """Report runtime and optional dependency availability."""
@@ -239,10 +313,17 @@ def doctor() -> None:
 
     python_ok = tuple(map(int, platform.python_version_tuple()[:2])) >= (3, 10)
     table.add_row("Python", "PASS" if python_ok else "FAIL", platform.python_version())
-    for package in ("scrapling", "llama_cpp", "yaml", "pydantic"):
+    for package in ("scrapling", "yaml", "pydantic"):
         available = importlib.util.find_spec(package) is not None
         table.add_row(package, "PASS" if available else "FAIL",
                       "installed" if available else "required package is not installed")
+    from peke.llama_server import LlamaServer, LlamaServerError
+    try:
+        server = LlamaServer()
+        server.version()
+        table.add_row("llama-server", "PASS", str(server.executable))
+    except LlamaServerError as exc:
+        table.add_row("llama-server", "OPTIONAL", str(exc))
     gui_available = importlib.util.find_spec("PySide6") is not None
     table.add_row("PySide6 GUI", "PASS" if gui_available else "OPTIONAL",
                   "installed" if gui_available else "install with pipx install 'peke\\[gui]'")

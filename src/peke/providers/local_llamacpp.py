@@ -1,6 +1,8 @@
 """Local llama.cpp provider implementation."""
 import json
 import logging
+import os
+import shutil
 import time
 from pathlib import Path
 from typing import Any
@@ -20,6 +22,7 @@ class LocalLlamaCppProvider(Provider):
         self.settings = settings
         self.custom_model_path = model_path
         self._llm: Any | None = None
+        self._server: Any | None = None
         self._lock_path = Path.home() / ".peke" / "model.lock"
 
     def _get_model_path(self) -> Path:
@@ -48,7 +51,7 @@ class LocalLlamaCppProvider(Provider):
             except ImportError as exc:
                 from peke.extract import ExtractionError
 
-                raise ExtractionError("llama-cpp-python is not installed; install Peke dependencies.") from exc
+                raise ExtractionError("llama-cpp-python is not installed. Use standalone llama-server, or explicitly enable legacy mode with PEKE_ALLOW_LEGACY_LLAMA_CPP_PYTHON=1.") from exc
             try:
                 self._llm = Llama(
                     model_path=str(model_path),
@@ -61,7 +64,7 @@ class LocalLlamaCppProvider(Provider):
                 raise ProviderError(
                     f"Failed to load local model {model_path.name}: {exc}",
                     retryable=False,
-                    hint="Ensure the GGUF model file is valid and supported by llama-cpp-python.",
+                    hint="Ensure the GGUF model is valid and the standalone llama-server build supports its architecture.",
                 ) from exc
         return self._llm
 
@@ -77,18 +80,39 @@ class LocalLlamaCppProvider(Provider):
         lock = FileLock(str(self._lock_path), timeout=60)
         start_time = time.perf_counter()
         with lock:
-            llm = self._get_llm()
-            messages = [
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
-            ]
             try:
-                response = llm.create_chat_completion(
-                    messages=messages,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                    response_format={"type": "json_object", "schema": json_schema},
-                )
+                # Prefer the standalone server when configured or available on PATH.
+                from peke.llama_server import LlamaServer
+                server_candidate = LlamaServer._resolve_executable(None)
+                if server_candidate:
+                    if self._server is None:
+                        self._server = LlamaServer(executable=server_candidate, model=self._get_model_path(),
+                                                   context=self.settings.n_ctx)
+                    self._server.start()
+                    response = self._server.complete(system, user, json_schema, temperature, max_tokens)
+                elif os.environ.get("PEKE_ALLOW_LEGACY_LLAMA_CPP_PYTHON", "").strip().lower() in {"1", "true", "yes"}:
+                    # Explicit opt-in only: never let the normal installation path trigger a
+                    # llama-cpp-python native build or import.
+                    llm = self._get_llm()
+                    messages = [
+                        {"role": "system", "content": system},
+                        {"role": "user", "content": user},
+                    ]
+                    response = llm.create_chat_completion(
+                        messages=messages,
+                        temperature=temperature,
+                        max_tokens=max_tokens,
+                        response_format={"type": "json_object", "schema": json_schema},
+                    )
+                else:
+                    raise ProviderError(
+                        "The standalone llama.cpp runtime (llama-server) was not found. "
+                        "Install a compatible llama-server build and set LLAMA_SERVER_PATH, "
+                        "or explicitly opt into the legacy binding with "
+                        "PEKE_ALLOW_LEGACY_LLAMA_CPP_PYTHON=1.",
+                        retryable=False,
+                        hint="Peke no longer requires llama-cpp-python for normal installation.",
+                    )
                 elapsed = max(time.perf_counter() - start_time, 0.000001)
                 raw_text = response["choices"][0]["message"]["content"]
                 usage = response.get("usage", {})
@@ -112,6 +136,8 @@ class LocalLlamaCppProvider(Provider):
                     latency_ms=elapsed * 1000.0,
                     provider_name=self.name,
                 )
+            except ProviderError:
+                raise
             except Exception as exc:
                 raise ProviderError(
                     f"llama.cpp execution failed: {exc}",

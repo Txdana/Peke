@@ -101,7 +101,7 @@ No Docker daemon, administrator elevation, or external service configuration is 
 
 ## Local AI & GGUF Inference
 
-- Local GGUF model support uses `llama-cpp-python`.
+- Local GGUF model support uses the standalone `llama-server` executable from llama.cpp. Normal Peke installation does not compile `llama-cpp-python`; GPU acceleration depends on a compatible runtime build and drivers.
 - **CPU Fallback:** CPU inference is always available across Linux and macOS.
 - **Apple Silicon (Metal):** Acceleration is enabled automatically when compiled with Metal support.
 - Model files are managed under `~/.peke/models/` and are never auto-downloaded without user action.

@@ -11,6 +11,8 @@ from peke.schemas import Article
 
 
 def test_llama_cpp_is_loaded_lazily_with_local_model_settings(tmp_path, monkeypatch):
+    monkeypatch.setenv("PEKE_ALLOW_LEGACY_LLAMA_CPP_PYTHON", "1")
+    monkeypatch.setenv("LLAMA_SERVER_PATH", str(tmp_path / "no-server"))
     model_path = tmp_path / "tiny.gguf"
     model_path.write_bytes(b"test fixture is not a real model")
     fake_instance = MagicMock()
@@ -35,6 +37,8 @@ def test_missing_local_model_fails_before_importing_backend(tmp_path):
 
 
 def test_missing_llama_cpp_dependency_has_actionable_error(tmp_path, monkeypatch):
+    monkeypatch.setenv("PEKE_ALLOW_LEGACY_LLAMA_CPP_PYTHON", "1")
+    monkeypatch.setenv("LLAMA_SERVER_PATH", str(tmp_path / "no-server"))
     model_path = tmp_path / "present.gguf"
     model_path.write_bytes(b"fixture")
     monkeypatch.setitem(sys.modules, "llama_cpp", None)
@@ -44,6 +48,8 @@ def test_missing_llama_cpp_dependency_has_actionable_error(tmp_path, monkeypatch
 
 
 def test_end_to_end_extractor_uses_fake_local_runtime(tmp_path, monkeypatch):
+    monkeypatch.setenv("PEKE_ALLOW_LEGACY_LLAMA_CPP_PYTHON", "1")
+    monkeypatch.setenv("LLAMA_SERVER_PATH", str(tmp_path / "no-server"))
     model_path = tmp_path / "tiny.gguf"
     model_path.write_bytes(b"test fixture is not a real model")
 

@@ -6,8 +6,8 @@ Peke supports pluggable AI providers for schema-constrained extraction and sub-a
 
 ### 1. Local llama.cpp (Built-in)
 - **Kind:** `local_builtin` / `local_custom_path`
-- Runs in-process via `llama-cpp-python` without background daemons.
-- Shared model file locking ensures process-safe access across CLI, GUI, and MCP calls.
+- Uses the standalone `llama-server` executable through its OpenAI-compatible local API. This avoids requiring native Python binding compilation during normal installation.
+- Shared model file locking ensures process-safe access across CLI, GUI, and MCP calls. Set `LLAMA_SERVER_PATH` or place `llama-server` on `PATH`; see `docs/models.md`.
 
 ### 2. Ollama
 - **Kind:** `ollama`
