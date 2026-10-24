@@ -12,6 +12,19 @@ from typing import Any
 from peke.mcp.clients.base import ClientRegistrar, get_peke_launcher
 
 
+def _run_quiet(cmd: list[str], timeout: float = 8.0) -> "subprocess.CompletedProcess[str] | None":
+    """Run a CLI without flashing a console window and never block for long."""
+    exe = shutil.which(cmd[0])
+    if exe is None:
+        return None
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
+    try:
+        return subprocess.run([exe, *cmd[1:]], capture_output=True, text=True, check=False,
+                              timeout=timeout, stdin=subprocess.DEVNULL, creationflags=flags)
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
 def create_backup(path: Path) -> Path | None:
     """Create timestamped backup of config file before modifying."""
     if not path.is_file():
@@ -56,13 +69,14 @@ class ClaudeCodeRegistrar(ClientRegistrar):
         return shutil.which("claude") is not None or (Path.home() / ".claude.json").exists()
 
     def is_registered(self) -> bool:
-        if not shutil.which("claude"):
-            return False
+        # Read the config file instead of running `claude mcp list`, which health-checks
+        # every configured server (slow, and opens console windows from a GUI app).
         try:
-            res = subprocess.run(["claude", "mcp", "list"], capture_output=True, text=True, check=False)
-            return "peke" in res.stdout.lower()
-        except OSError:
+            data = json.loads((Path.home() / ".claude.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
             return False
+        servers = data.get("mcpServers", {}) if isinstance(data, dict) else {}
+        return isinstance(servers, dict) and "peke" in servers
 
     def plan_install(self, scope: str = "user", transport: str = "stdio", port: int = 8765) -> tuple[dict[str, Any] | None, str]:
         entry = get_mcp_entry(transport, port)
@@ -77,8 +91,8 @@ class ClaudeCodeRegistrar(ClientRegistrar):
 
         if shutil.which("claude"):
             cmd = ["claude", "mcp", "add", "--scope", scope, "peke", "--", entry["command"]] + entry["args"]
-            res = subprocess.run(cmd, capture_output=True, text=True, check=False)
-            return res.returncode == 0
+            res = _run_quiet(cmd, timeout=30.0)
+            return res is not None and res.returncode == 0
         return True
 
 

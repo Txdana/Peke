@@ -273,7 +273,7 @@ def load_settings() -> Settings:
         temperature=temperature,
         request_delay_seconds=number("REQUEST_DELAY_SECONDS", 1.0),
         output_dir=Path(value("OUTPUT_DIR", "output")),
-        rea_command=value("REA_COMMAND", "").strip() or None,
+        rea_command=value("REA_COMMAND", "").strip() or _default_rea(),
         rea_cdp_endpoint=value("REA_CDP_ENDPOINT", "http://127.0.0.1:9222").strip(),
         fetch_timeout=number("FETCH_TIMEOUT", 30.0),
         max_response_bytes=integer("MAX_RESPONSE_BYTES", 50 * 1024 * 1024),
@@ -307,3 +307,9 @@ def load_settings() -> Settings:
 
 
 get_settings = load_settings
+
+
+def _default_rea() -> str | None:
+    from peke.rea_runtime import default_rea_command
+
+    return default_rea_command()

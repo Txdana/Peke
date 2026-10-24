@@ -290,6 +290,7 @@ function Assert-RequiredSourceFiles {
         'THIRD_PARTY_NOTICES.md',
         'packaging\windows\Peke.spec',
         'packaging\windows\Peke.iss',
+        'scripts\embed_rea.ps1',
         'src\peke\desktop\launcher.py',
         'src\peke\gui\assets\peke.ico'
     )
@@ -457,6 +458,11 @@ try {
     if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) {
         throw "PyInstaller did not produce '$exe'. Review the first build error above."
     }
+
+    # Embed REA (private Node runtime + pinned rea-agents) so the installer ships with it.
+    $embedScript = Join-Path $source 'scripts\embed_rea.ps1'
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $embedScript -Destination (Join-Path $source 'dist\Peke\rea')
+    if ($LASTEXITCODE -ne 0) { throw 'Embedding REA failed. Review the first error above.' }
 
     # Ensure the compiler output directory exists on a clean checkout.
     $installerOutputDirectory = Join-Path $source 'dist-installer'
