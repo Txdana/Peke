@@ -13,7 +13,14 @@ $Repo = 'https://github.com/Txdana/Peke.git'
 # Pin to the reviewed source commit. Never replace this with "main" or a tag.
 $PinnedCommit = '8575e2fc6b4d8aa9e1647e5d523373170012aeae'
 $AppName = 'Peke'
-$WorkRoot = Join-Path ([IO.Path]::GetTempPath()) ('peke-source-build-' + [guid]::NewGuid().ToString('N'))
+# Keep the build root short: PySide6 ships deeply nested Qt/QML files that can
+# exceed legacy Windows path limits when built below the default TEMP directory.
+$BuildBase = if (-not [string]::IsNullOrWhiteSpace($env:USERPROFILE)) {
+    $env:USERPROFILE
+} else {
+    [IO.Path]::GetTempPath()
+}
+$WorkRoot = Join-Path $BuildBase ('pbuild-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
 
 function Assert-ValidPin {
     if ($PinnedCommit -notmatch '^[0-9a-f]{40}$') {
@@ -373,9 +380,17 @@ Write-Host "Using Git: $((@($gitVersion) -join ' ').Trim())"
 Write-Host "Using Python: $python"
 Write-Host "Using Inno Setup compiler: $iscc"
 
+$oldTemp = $env:TEMP
+$oldTmp = $env:TMP
 New-Item -ItemType Directory -Path $WorkRoot -Force | Out-Null
 try {
-    $source = Join-Path $WorkRoot 'source'
+    # Keep pip, wheel extraction, and Qt build temporaries on the same short path.
+    $shortTemp = Join-Path $WorkRoot 'tmp'
+    New-Item -ItemType Directory -Path $shortTemp -Force | Out-Null
+    $env:TEMP = $shortTemp
+    $env:TMP = $shortTemp
+
+    $source = Join-Path $WorkRoot 'src'
 
     # Each argument is passed as a separate native argument. Use named
     # parameters to avoid PowerShell parsing array expressions as splatting.
@@ -491,5 +506,15 @@ try {
     Start-Process -FilePath $installedExe -WorkingDirectory $InstallRoot
 }
 finally {
+    if ($null -eq $oldTemp) {
+        Remove-Item Env:TEMP -ErrorAction SilentlyContinue
+    } else {
+        $env:TEMP = $oldTemp
+    }
+    if ($null -eq $oldTmp) {
+        Remove-Item Env:TMP -ErrorAction SilentlyContinue
+    } else {
+        $env:TMP = $oldTmp
+    }
     Remove-Item -LiteralPath $WorkRoot -Recurse -Force -ErrorAction SilentlyContinue
 }
