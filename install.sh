@@ -14,18 +14,21 @@ for arg in "$@"; do
     --dry-run) DRY_RUN=1 ;;
     --yes) YES=1 ;;
     --uninstall)
-      printf '%s\n' "Uninstall Peke from pipx? User configuration is retained."
+      printf '%s\n' "Uninstall Peke from pipx and remove desktop integration?"
       if [ "$YES" -ne 1 ]; then
         printf 'Continue [y/N]? '
         if [ -r /dev/tty ]; then read -r answer </dev/tty; else answer=n; fi
         [ "$answer" = y ] || [ "$answer" = Y ] || exit 0
+      fi
+      if command -v peke >/dev/null 2>&1; then
+        peke desktop uninstall || true
       fi
       if command -v pipx >/dev/null 2>&1; then
         pipx uninstall peke || true
       else
         printf '%s\n' "pipx was not found; no package was removed."
       fi
-      printf '%s\n' "Peke package removed if installed. User configuration was retained."
+      printf '%s\n' "Peke package and desktop integration removed if installed. User configuration was retained."
       exit 0
       ;;
     *) printf 'Unknown option: %s\n' "$arg" >&2; exit 2 ;;
@@ -116,4 +119,10 @@ fi
 if [ "$NO_MODIFY_PATH" -eq 0 ]; then
   case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) printf '%s\n' "If peke is not found, add $HOME/.local/bin to PATH and reopen your terminal." ;; esac
 fi
+
+# Register desktop application shortcut & icon
+if command -v peke >/dev/null 2>&1; then
+  peke desktop install || true
+fi
+
 printf '\n%s\n' "Installed. Start Peke with: peke launch" "User configuration is managed by Peke and is not removed by uninstall."

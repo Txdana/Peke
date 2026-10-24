@@ -33,7 +33,8 @@ class PipelineWorker(QObject):
         try:
             settings = QSettings("Peke", "PekeWorkbench")
             selected = settings.value("selected_endpoint", {})
-            if not isinstance(selected, dict): selected = {}
+            if not isinstance(selected, dict):
+                selected = {}
             saved_path = str(settings.value("active_profile", ""))
             profile = None
             if saved_path and Path(saved_path).is_file():

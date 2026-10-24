@@ -1,27 +1,171 @@
-"""Typer command-line interface for Peke's headless Phase 1 pipeline."""
+"""Typer command-line interface for Peke's workbench and headless pipeline."""
 import importlib.util
 import json
 import logging
 import platform
+import shutil
+import subprocess
 from pathlib import Path
 
 import typer
 import yaml
 from rich.console import Console
+from rich.prompt import Confirm
 from rich.table import Table
 
 from peke import __version__
 from peke.banner import print_banner
-from peke.config import ConfigError, load_settings, save_user_settings, user_settings_path
+from peke.config import (
+    ConfigError,
+    load_settings,
+    save_user_settings,
+    user_config_toml_path,
+    user_settings_path,
+)
+from peke.desktop import (
+    install_desktop_integration,
+    is_desktop_installed,
+    uninstall_desktop_integration,
+)
 from peke.discover import run_rea
 from peke.mcp.cli import mcp_app
+from peke.models import DEFAULT_MODEL_FILE, DEFAULT_MODEL_REPO, ModelManager, ModelManagerError
 from peke.pipeline import Event, Pipeline
 from peke.profile import ProfileError, load_profile
 from peke.schemas import get_schema, list_schemas
+from peke.updates import check_for_updates
 
 app = typer.Typer(name="peke", help="Peke: local-first data extraction workbench", no_args_is_help=False)
 app.add_typer(mcp_app, name="mcp", help="Peke MCP server management and agent registration")
+
+models_app = typer.Typer(name="models", help="Managed GGUF model downloads and selection")
+app.add_typer(models_app, name="models")
+
+desktop_app = typer.Typer(name="desktop", help="OS desktop application integration and launcher shortcuts")
+app.add_typer(desktop_app, name="desktop")
+
 console = Console()
+
+
+@desktop_app.command("install")
+def desktop_install_command() -> None:
+    """Register OS desktop application entry and shortcuts."""
+    res = install_desktop_integration()
+    console.print(f"[green]Installed desktop application shortcuts:[/green] {res}")
+
+
+@desktop_app.command("uninstall")
+def desktop_uninstall_command() -> None:
+    """Remove OS desktop application entry and shortcuts."""
+    removed = uninstall_desktop_integration()
+    console.print(f"[green]Removed desktop application shortcuts:[/green] {removed}")
+
+
+@models_app.command("list")
+def models_list_command() -> None:
+    """List managed local GGUF models."""
+    manager = ModelManager()
+    models = manager.list_models()
+    if not models:
+        console.print("No downloaded models found in managed store.")
+        return
+    table = Table(title="Managed GGUF Models", show_header=True, header_style="bold")
+    table.add_column("Active", justify="center")
+    table.add_column("Repository")
+    table.add_column("File")
+    table.add_column("Size (MB)", justify="right")
+    table.add_column("Path")
+    for m in models:
+        active_str = "[green]*[/green]" if m.active else ""
+        table.add_row(
+            active_str,
+            m.repo,
+            m.file,
+            f"{m.size_bytes / (1024 * 1024):.1f}",
+            m.local_path,
+        )
+    console.print(table)
+
+
+@models_app.command("download")
+def models_download_command(
+    repo: str = typer.Argument(DEFAULT_MODEL_REPO, help="Hugging Face repository ID"),
+    file: str = typer.Argument(DEFAULT_MODEL_FILE, help="GGUF filename in repository"),
+) -> None:
+    """Download a GGUF model from Hugging Face Hub."""
+    from rich.progress import (
+        BarColumn,
+        DownloadColumn,
+        Progress,
+        TextColumn,
+        TimeRemainingColumn,
+        TransferSpeedColumn,
+    )
+
+    manager = ModelManager()
+    console.print(f"Downloading model [bold]{repo}/{file}[/bold]...")
+
+    with Progress(
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        DownloadColumn(),
+        TransferSpeedColumn(),
+        TimeRemainingColumn(),
+        console=console,
+    ) as progress:
+        task = progress.add_task("Downloading", total=100)
+
+        def _cb(downloaded: int, total: int, speed: float, eta: float) -> None:
+            if total > 0:
+                progress.update(task, completed=downloaded, total=total)
+
+        try:
+            info = manager.download_model(repo=repo, file=file, progress_callback=_cb)
+            console.print(f"[green]Model ready and activated:[/green] {info.local_path}")
+        except ModelManagerError as exc:
+            console.print(f"[red]Download failed: {exc}[/red]")
+            raise typer.Exit(1) from exc
+
+
+@models_app.command("remove")
+def models_remove_command(
+    target: str = typer.Argument(..., help="Model repository/file or filename to remove"),
+) -> None:
+    """Remove a downloaded GGUF model."""
+    manager = ModelManager()
+    if manager.remove_model(target):
+        console.print(f"[green]Removed model:[/green] {target}")
+    else:
+        console.print(f"[red]Model not found in store:[/red] {target}")
+        raise typer.Exit(1)
+
+
+@models_app.command("use")
+def models_use_command(
+    target: str = typer.Argument(..., help="Model key (repo/file) or local file path"),
+) -> None:
+    """Set the active model for local LLM extraction."""
+    manager = ModelManager()
+    try:
+        info = manager.set_active_model(target)
+        save_user_settings({"MODEL_PATH": info.local_path})
+        console.print(f"[green]Active model set to:[/green] {info.local_path}")
+    except ModelManagerError as exc:
+        console.print(f"[red]Failed to activate model: {exc}[/red]")
+        raise typer.Exit(1) from exc
+
+
+@models_app.command("gc")
+def models_gc_command(
+    keep_last: int = typer.Option(1, "--keep-last", help="Number of recently used models to retain"),
+) -> None:
+    """Garbage collect older, non-active downloaded models."""
+    manager = ModelManager()
+    removed = manager.gc(keep_last=keep_last)
+    if removed:
+        console.print(f"[green]Removed {len(removed)} old model(s):[/green] {', '.join(removed)}")
+    else:
+        console.print("No models were removed by garbage collection.")
 
 
 def _event(event: Event) -> None:
@@ -102,6 +246,11 @@ def doctor() -> None:
     gui_available = importlib.util.find_spec("PySide6") is not None
     table.add_row("PySide6 GUI", "PASS" if gui_available else "OPTIONAL",
                   "installed" if gui_available else "install with pipx install 'peke\\[gui]'")
+
+    desktop_ok = is_desktop_installed()
+    table.add_row("Desktop Integration", "PASS" if desktop_ok else "OPTIONAL",
+                  "Launcher registered" if desktop_ok else "Run 'peke desktop install' to register application")
+
     try:
         model = settings.require_model()
         table.add_row("MODEL_PATH", "PASS", str(model))
@@ -129,23 +278,50 @@ def doctor() -> None:
     table.add_row("MCP Registrations", "PASS" if mcp_regs else "INFO",
                   f"{len(mcp_regs)} agent(s) registered ({', '.join(r.display_name for r in mcp_regs) if mcp_regs else 'none'})")
     console.print(table)
+    console.print("[dim]To remove Peke completely, run: peke uninstall --purge[/dim]")
 
 
 @app.command()
-def discover(url: str = typer.Argument(..., help="Target website URL"),
-            out: Path = typer.Option(Path("profiles/discovered.yaml"), "--out", help="Draft profile YAML path"),
-            findings: Path | None = typer.Option(None, "--findings", help="Also save normalized findings JSON")) -> None:
-    """Run optional REA discovery and create a reviewable draft profile."""
+def discover(
+    url: str = typer.Argument(..., help="Target website URL"),
+    out: Path = typer.Option(Path("profiles/discovered.yaml"), "--out", help="Draft profile YAML path"),
+    findings: Path | None = typer.Option(None, "--findings", help="Also save normalized findings JSON"),
+    deep: bool = typer.Option(False, "--deep", help="Run multi-agent deep discovery reconnaissance"),
+    subagent_provider: str | None = typer.Option(None, "--subagent-provider", help="Override sub-agent provider"),
+) -> None:
+    """Run optional REA or deep sub-agent discovery and create a reviewable draft profile."""
     from urllib.parse import urlparse
     parsed = urlparse(url)
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         console.print("[red]Provide a valid http:// or https:// URL.[/red]")
         raise typer.Exit(2)
     settings = load_settings()
-    hints = run_rea(url, settings, lambda event: _event(event))
-    draft = {"name": f"Discovered target: {parsed.netloc}", "url": url, "fetcher": "basic",
-             "headers": {}, "params": {}, "method": "GET", "endpoints": [h.model_dump(mode="json") for h in hints],
-             "schema_name": "Article", "mode": "auto", "max_pages": 1}
+
+    if deep:
+        from peke.agents import Orchestrator
+        from peke.providers import get_provider
+
+        prov = get_provider(subagent_provider, settings=settings) if subagent_provider else None
+        orchestrator = Orchestrator(settings=settings, on_event=_event)
+        recon_result = orchestrator.run_reconnaissance(url, subagent_provider=prov)
+        hints_data = recon_result.bundle.get("endpoints", [])
+        console.print(f"[green]Deep discovery completed (Run ID: {recon_result.run_id}).[/green]")
+    else:
+        hints = run_rea(url, settings, lambda event: _event(event))
+        hints_data = [h.model_dump(mode="json") for h in hints]
+
+    draft = {
+        "name": f"Discovered target: {parsed.netloc}",
+        "url": url,
+        "fetcher": "basic",
+        "headers": {},
+        "params": {},
+        "method": "GET",
+        "endpoints": hints_data,
+        "schema_name": "Article",
+        "mode": "auto",
+        "max_pages": 1,
+    }
     try:
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(yaml.safe_dump(draft, sort_keys=False, allow_unicode=True), encoding="utf-8")
@@ -156,7 +332,7 @@ def discover(url: str = typer.Argument(..., help="Target website URL"),
         console.print(f"[red]Could not write discovery files: {exc}[/red]")
         raise typer.Exit(2) from exc
     console.print(f"[green]Draft profile saved:[/green] {out}")
-    console.print(f"REA returned {len(hints)} hint(s). Review all findings before use.")
+    console.print(f"Returned {len(hints_data)} endpoint hint(s). Review all findings before use.")
 
 
 @app.command()
@@ -231,12 +407,14 @@ def launch() -> None:
 
 @app.command()
 def update(
+    check: bool = typer.Option(False, "--check", help="Check for available updates without installing"),
     yes: bool = typer.Option(False, "--yes", help="Skip confirmation"),
 ) -> None:
-    """Update the pipx-managed Peke installation."""
-    import shutil
-
-    from rich.prompt import Confirm
+    """Check for updates or update the Peke installation."""
+    if check:
+        res = check_for_updates()
+        console.print(res.message)
+        return
 
     pipx = shutil.which("pipx")
     if not pipx:
@@ -244,13 +422,11 @@ def update(
         raise typer.Exit(1)
     if not yes and not Confirm.ask("Update Peke using pipx?", default=False):
         raise typer.Exit()
-    import subprocess
 
     result = subprocess.run([pipx, "upgrade", "peke"], check=False)
     if result.returncode:
         raise typer.Exit(result.returncode)
 
-    # Re-validate agent registrations
     from peke.mcp.clients.registrars import get_all_registrars
     for reg in get_all_registrars():
         if reg.is_registered():
@@ -260,31 +436,70 @@ def update(
 
 @app.command()
 def uninstall(
-    yes: bool = typer.Option(False, "--yes", help="Skip confirmation"),
+    purge: bool = typer.Option(False, "--purge", help="Completely purge Peke installation and configuration"),
+    keep_models: bool = typer.Option(False, "--keep-models", help="Retain downloaded GGUF models"),
+    keep_config: bool = typer.Option(False, "--keep-config", help="Retain user configuration settings"),
+    yes: bool = typer.Option(False, "--yes", help="Skip confirmation prompt"),
 ) -> None:
-    """Uninstall the pipx-managed package; user configuration is retained."""
-    import shutil
-    import subprocess
+    """Uninstall Peke, desktop shortcuts, and optionally purge user configuration/models."""
+    console.print("[bold red]Peke Removal Plan[/bold red]")
+    plan_items = [
+        "- Desktop shortcuts and application registration",
+        "- MCP agent server registrations",
+    ]
+    if purge:
+        if not keep_config:
+            plan_items.append("- User settings and secrets (~/.peke/settings.json, config.toml, secrets.toml)")
+        if not keep_models:
+            plan_items.append("- Downloaded GGUF models (~/.peke/models)")
+        plan_items.append("- Run history and logs (~/.peke/runs)")
+    plan_items.append("- Managed Python package environment")
 
-    from rich.prompt import Confirm
+    for item in plan_items:
+        console.print(item)
 
-    pipx = shutil.which("pipx")
-    if not pipx:
-        console.print("pipx was not found. Remove Peke using the installer you used.", markup=False)
-        raise typer.Exit(1)
-    if not yes and not Confirm.ask("Uninstall Peke? User configuration will be retained.", default=False):
+    if not yes and not Confirm.ask("Proceed with removal?", default=False):
+        console.print("Uninstall cancelled.")
         raise typer.Exit()
 
+    # 1. Desktop integration removal
+    uninstall_desktop_integration()
+    console.print("[green]Removed desktop application shortcuts.[/green]")
+
+    # 2. MCP cleanup
     from peke.mcp.clients.registrars import get_all_registrars
     registered = [r for r in get_all_registrars() if r.is_registered()]
-    if registered and (yes or Confirm.ask("Remove Peke MCP server registrations from local AI agents?", default=True)):
+    if registered:
         for reg in registered:
             reg.uninstall()
         console.print("[green]Removed Peke MCP agent registrations.[/green]")
 
-    result = subprocess.run([pipx, "uninstall", "peke"], check=False)
-    if result.returncode:
-        raise typer.Exit(result.returncode)
+    # 3. Purge user data if requested
+    if purge:
+        peke_dir = Path.home() / ".peke"
+        if peke_dir.is_dir():
+            if not keep_models:
+                models_dir = peke_dir / "models"
+                if models_dir.is_dir():
+                    shutil.rmtree(models_dir, ignore_errors=True)
+            if not keep_config:
+                settings_file = user_settings_path()
+                settings_file.unlink(missing_ok=True)
+                config_file = user_config_toml_path()
+                config_file.unlink(missing_ok=True)
+                secrets_file = peke_dir / "secrets.toml"
+                secrets_file.unlink(missing_ok=True)
+            runs_dir = peke_dir / "runs"
+            if runs_dir.is_dir():
+                shutil.rmtree(runs_dir, ignore_errors=True)
+        console.print("[green]Purged requested Peke data and history.[/green]")
+
+    # 4. Pipx uninstall
+    pipx = shutil.which("pipx")
+    if pipx:
+        result = subprocess.run([pipx, "uninstall", "peke"], check=False)
+        if result.returncode == 0:
+            console.print("[green]Successfully uninstalled Peke package.[/green]")
 
 
 @app.callback(invoke_without_command=True)

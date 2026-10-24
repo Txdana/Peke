@@ -11,7 +11,8 @@ from peke.gui.widgets.vram_card import VramCard
 NAV_ITEMS = [
     ("Target Inspection (REA)", "target"),
     ("Stealth Scraper", "scraper"),
-    ("Model Pipeline (llama.cpp)", "model"),
+    ("Providers & Models", "model"),
+    ("Sub-Agents (Deep Recon)", "target"),
     ("JSON Schemas", "schema"),
     ("Agent Access (MCP)", "target"),
 ]
@@ -96,7 +97,7 @@ class Sidebar(QFrame):
         self.brand.setVisible(not self.collapsed)
         self.chip.setVisible(not self.collapsed)
         self.vram.setVisible(not self.collapsed)
-        for button, (label, icon) in zip(self.buttons, NAV_ITEMS):
+        for button, (label, _icon) in zip(self.buttons, NAV_ITEMS, strict=False):
             button.setText("" if self.collapsed else f"  {label}")
             button.setToolTip(label if self.collapsed else "")
             button.setAccessibleName(label)
