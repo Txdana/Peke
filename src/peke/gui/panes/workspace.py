@@ -15,8 +15,8 @@ from PySide6.QtWidgets import (
 from peke.gui import theme
 from peke.gui.panes.mcp_page import McpSettingsPage
 from peke.gui.panes.providers_pane import ProvidersPane
-from peke.gui.panes.settings_pages import SchemaSettingsPage, ScraperSettingsPage
 from peke.gui.panes.search_page import SearchPage
+from peke.gui.panes.settings_pages import SchemaSettingsPage, ScraperSettingsPage
 from peke.gui.panes.subagents_pane import SubagentsPane
 from peke.gui.widgets.console import ExecutionConsole
 from peke.gui.widgets.endpoint_tree import EndpointTree

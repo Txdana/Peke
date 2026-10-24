@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 from urllib.parse import urlsplit
 
-from PySide6.QtCore import QObject, QThread, Qt, Signal, Slot, QUrl
+from PySide6.QtCore import QObject, Qt, QThread, QUrl, Signal, Slot
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QComboBox,
@@ -14,8 +14,8 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QLineEdit,
-    QPushButton,
     QPlainTextEdit,
+    QPushButton,
     QScrollArea,
     QTableWidget,
     QTableWidgetItem,
@@ -24,9 +24,9 @@ from PySide6.QtWidgets import (
 )
 
 from peke.config import load_settings, save_user_settings
+from peke.gui import theme
 from peke.search import MAX_URL_LENGTH, SearchError, SearxngClient, detect
 from peke.searxng_runtime import BASE_URL, SearXNGServiceError
-from peke.gui import theme
 
 logger = logging.getLogger(__name__)
 

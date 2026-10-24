@@ -6,11 +6,10 @@ import sys
 from pathlib import Path
 
 import typer
-
-from peke import __version__
 from rich.console import Console
 from rich.table import Table
 
+from peke import __version__
 from peke.mcp.clients.registrars import get_all_registrars
 from peke.mcp.http import run_http_server
 from peke.mcp.security import get_or_create_mcp_token, rotate_mcp_token

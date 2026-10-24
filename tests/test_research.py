@@ -2,7 +2,6 @@
 import json
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from types import SimpleNamespace
 from unittest.mock import patch
 
 from peke.config import Settings
@@ -26,9 +25,13 @@ class _Fake(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if _Fake.code != 200:
-            self.send_response(_Fake.code); self.end_headers(); return
+            self.send_response(_Fake.code)
+            self.end_headers()
+            return
         body = json.dumps({"results": [{"url": "https://s.com/1", "title": "one", "content": "c"}]}).encode()
-        self.send_response(200); self.end_headers(); self.wfile.write(body)
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(body)
 
 
 def _server(code=200):
