@@ -35,9 +35,21 @@ def test_validate_provider_url():
 
 
 def test_secrets_fallback(tmp_path, monkeypatch):
+    import json
+    import sys
+    import types
+
     monkeypatch.setattr("platformdirs.user_config_dir", lambda app, org: str(tmp_path))
-    monkeypatch.setattr("keyring.set_password", MagicMock(side_effect=Exception("No keyring")))
-    monkeypatch.setattr("keyring.get_password", MagicMock(return_value=None))
+    fake_keyring = types.ModuleType("keyring")
+    fake_keyring.set_password = MagicMock(side_effect=Exception("No keyring"))
+    fake_keyring.get_password = MagicMock(return_value=None)
+    fake_keyring.get_keyring = MagicMock(side_effect=Exception("No keyring"))
+    monkeypatch.setitem(sys.modules, "keyring", fake_keyring)
+    fake_tomli_w = types.ModuleType("tomli_w")
+    fake_tomli_w.dumps = lambda data: "\n".join(
+        f"{key} = {json.dumps(value)}" for key, value in data.items()
+    ) + "\n"
+    monkeypatch.setitem(sys.modules, "tomli_w", fake_tomli_w)
 
     set_secret("test_key", "secret123")
     val = get_secret("test_key")
@@ -177,3 +189,70 @@ def test_get_provider_registry(tmp_path):
 
     p4 = get_provider("custom_openai", settings=settings, provider_config={"base_url": "http://127.0.0.1:8000"})
     assert isinstance(p4, CustomOpenAIProvider)
+
+
+def test_secret_file_fallback_is_private_and_atomic(tmp_path, monkeypatch):
+    import json
+    import os
+    import sys
+    import types
+
+    import peke.providers.secrets as secrets_module
+
+    config_dir = tmp_path / "config"
+    victim = tmp_path / "victim.txt"
+    victim.write_text("do not overwrite", encoding="utf-8")
+    legacy_temp = config_dir / "secrets.toml.tmp"
+    config_dir.mkdir()
+    try:
+        legacy_temp.symlink_to(victim)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlink creation is unavailable on this platform")
+    monkeypatch.setattr(secrets_module, "_secrets_toml_path", lambda: config_dir / "secrets.toml")
+
+    fake_keyring = types.ModuleType("keyring")
+    fake_keyring.get_keyring = MagicMock(side_effect=Exception("No keyring"))
+    monkeypatch.setitem(sys.modules, "keyring", fake_keyring)
+    fake_tomli_w = types.ModuleType("tomli_w")
+    fake_tomli_w.dumps = lambda data: "\n".join(
+        f"{key} = {json.dumps(value)}" for key, value in data.items()
+    ) + "\n"
+    monkeypatch.setitem(sys.modules, "tomli_w", fake_tomli_w)
+
+    set_secret("token", "private-value")
+    secret_path = config_dir / "secrets.toml"
+
+    assert victim.read_text(encoding="utf-8") == "do not overwrite"
+    assert secret_path.read_text(encoding="utf-8").strip() == 'token = "private-value"'
+    if os.name != "nt":
+        assert config_dir.stat().st_mode & 0o777 == 0o700
+        assert secret_path.stat().st_mode & 0o777 == 0o600
+
+
+def test_secret_file_fallback_refuses_destination_symlink(tmp_path, monkeypatch):
+    import sys
+    import types
+
+    import peke.providers.secrets as secrets_module
+
+    config_dir = tmp_path / "config"
+    config_dir.mkdir(mode=0o700)
+    victim = tmp_path / "victim.txt"
+    victim.write_text("keep safe", encoding="utf-8")
+    secret_path = config_dir / "secrets.toml"
+    try:
+        secret_path.symlink_to(victim)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlink creation is unavailable on this platform")
+    monkeypatch.setattr(secrets_module, "_secrets_toml_path", lambda: secret_path)
+
+    fake_keyring = types.ModuleType("keyring")
+    fake_keyring.get_keyring = MagicMock(side_effect=Exception("No keyring"))
+    monkeypatch.setitem(sys.modules, "keyring", fake_keyring)
+    fake_tomli_w = types.ModuleType("tomli_w")
+    fake_tomli_w.dumps = lambda _data: 'token = "secret"\n'
+    monkeypatch.setitem(sys.modules, "tomli_w", fake_tomli_w)
+
+    with pytest.raises(OSError, match="symbolic link"):
+        set_secret("token", "secret")
+    assert victim.read_text(encoding="utf-8") == "keep safe"

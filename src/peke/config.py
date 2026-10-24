@@ -30,7 +30,17 @@ def user_config_toml_path() -> Path:
 def save_user_settings(values: dict[str, Any], *, merge: bool = True) -> Path:
     """Persist settings atomically, optionally preserving settings owned by other pages."""
     path = user_settings_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if os.name != "nt":
+        if path.parent.is_symlink():
+            raise OSError("Refusing to use a symbolic link as the settings directory")
+        path.parent.chmod(0o700)
+    if path.is_symlink():
+        raise OSError("Refusing to follow a symbolic link for the settings file")
+    if path.exists() and not path.is_file():
+        raise OSError("Settings path exists but is not a regular file")
+    if path.is_file() and os.name != "nt":
+        path.chmod(0o600)
     existing: dict[str, Any] = {}
     if merge and path.is_file():
         try:
@@ -77,6 +87,10 @@ class Settings:
     rea_command: str | None = None
     rea_cdp_endpoint: str = "http://127.0.0.1:9222"
     fetch_timeout: float = 30.0
+    max_response_bytes: int = 50 * 1024 * 1024  # 0 = unlimited
+    searxng_url: str | None = None  # SearXNG instance for `peke ask`; local ports are auto-detected when unset
+    subagents_max_probes: int = 0  # 0 = unlimited
+    subagents_max_scripts: int = 0  # 0 = unlimited
     # MCP settings
     mcp_read_only: bool = False
     mcp_disabled_tools: tuple[str, ...] = ()
@@ -122,14 +136,16 @@ class Settings:
             raise ConfigError("REQUEST_DELAY_SECONDS must be between 0 and 3600")
         if not math.isfinite(self.fetch_timeout) or not 0.1 <= self.fetch_timeout <= 300.0:
             raise ConfigError("FETCH_TIMEOUT must be between 0.1 and 300 seconds")
+        if self.max_response_bytes < 0 or self.subagents_max_probes < 0 or self.subagents_max_scripts < 0:
+            raise ConfigError("MAX_RESPONSE_BYTES, SUBAGENTS_MAX_PROBES and SUBAGENTS_MAX_SCRIPTS must be zero (unlimited) or greater")
         if self.mcp_robots_policy not in {"off", "warn", "respect"}:
             raise ConfigError("MCP_ROBOTS_POLICY must be off, warn, or respect")
         if self.mcp_max_inline_chars < 100 or self.mcp_max_inline_chars > 1_000_000:
             raise ConfigError("MCP_MAX_INLINE_CHARS must be between 100 and 1000000")
-        if self.mcp_max_fetch_bytes < 1024 or self.mcp_max_fetch_bytes > 100_000_000:
-            raise ConfigError("MCP_MAX_FETCH_BYTES must be between 1024 and 100000000")
-        if self.mcp_max_pages_per_call < 1 or self.mcp_max_pages_per_call > 100:
-            raise ConfigError("MCP_MAX_PAGES_PER_CALL must be between 1 and 100")
+        if self.mcp_max_fetch_bytes < 1024 or self.mcp_max_fetch_bytes > 10_000_000_000:
+            raise ConfigError("MCP_MAX_FETCH_BYTES must be between 1024 and 10000000000")
+        if self.mcp_max_pages_per_call < 1 or self.mcp_max_pages_per_call > 100_000:
+            raise ConfigError("MCP_MAX_PAGES_PER_CALL must be between 1 and 100000")
         if self.mcp_http_port < 1024 or self.mcp_http_port > 65535:
             raise ConfigError("MCP_HTTP_PORT must be between 1024 and 65535")
         if self.provider_subagents_mode not in {"auto", "per_role"}:
@@ -172,7 +188,7 @@ def load_settings() -> Settings:
     toml_path = user_config_toml_path()
     if toml_path.is_file():
         try:
-            import tomllib
+            from peke.toml_compat import tomllib
             toml_data = tomllib.loads(toml_path.read_text(encoding="utf-8"))
             if isinstance(toml_data, dict):
                 providers_main = toml_data.get("providers", {}).get("main", {})
@@ -260,6 +276,10 @@ def load_settings() -> Settings:
         rea_command=value("REA_COMMAND", "").strip() or None,
         rea_cdp_endpoint=value("REA_CDP_ENDPOINT", "http://127.0.0.1:9222").strip(),
         fetch_timeout=number("FETCH_TIMEOUT", 30.0),
+        max_response_bytes=integer("MAX_RESPONSE_BYTES", 50 * 1024 * 1024),
+        searxng_url=value("SEARXNG_URL", "").strip() or None,
+        subagents_max_probes=integer("SUBAGENTS_MAX_PROBES", 0),
+        subagents_max_scripts=integer("SUBAGENTS_MAX_SCRIPTS", 0),
         mcp_read_only=boolean("MCP_READ_ONLY", False),
         mcp_disabled_tools=string_list("MCP_DISABLED_TOOLS", ()),
         mcp_allow_stealth=boolean("MCP_ALLOW_STEALTH", True),

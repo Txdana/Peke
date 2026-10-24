@@ -1,6 +1,6 @@
 # Peke MCP Server User Guide
 
-Peke 0.2.0 includes a built-in Model Context Protocol (MCP) server that lets local AI agents (Claude Code, Claude Desktop, Codex, Cursor, Gemini CLI, VS Code, Windsurf) use Peke's stealth fetching, endpoint discovery, and schema-constrained extraction capabilities as native tools.
+Peke includes a built-in Model Context Protocol (MCP) server that lets local AI agents (Claude Code, Claude Desktop, Codex, Cursor, Gemini CLI, VS Code, Windsurf) use Peke's stealth fetching, endpoint discovery, and schema-constrained extraction capabilities as native tools.
 
 ---
 

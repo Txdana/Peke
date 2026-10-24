@@ -20,6 +20,8 @@ On Windows, run the PowerShell installer:
 irm https://raw.githubusercontent.com/Txdana/Peke/main/install.ps1 | iex
 ```
 
+To install the current source tree from this repository/archive instead of the published release, run `./install.ps1 -FromSource` from the extracted project folder. The normal installer remains the checksum-verified release path.
+
 You can also install directly from PyPI with `pipx install 'peke[gui]'`. The bootstrap scripts verify the Peke wheel and a release-specific hash-locked runtime dependency list against the release `SHA256SUMS` manifest before installation. See [`docs/installers.md`](docs/installers.md) for options and integrity limitations.
 
 Or develop from a checkout:
@@ -78,6 +80,8 @@ Agents can use Peke's 11 tools to stealth-fetch pages, discover API endpoints, p
 
 ## CLI reference
 
+- `peke ask PROMPT [--deep] [--depth N] [--no-search]` — situation-aware research: SearXNG search, else links from your prompt, then scrape, REA and answer. See [`docs/ask.md`](docs/ask.md).
+- **Search & Research** in the desktop app — use the bundled SearXNG service (no Docker required), test its JSON API, search the web, and research source pages. The service runs on loopback only and queries external search engines for live results. See [`docs/searxng.md`](docs/searxng.md).
 - `peke` — show the terminal banner, then launch the GUI.
 - `peke mcp serve` — run stdio or HTTP MCP server for AI agents.
 - `peke mcp install` — register Peke with detected local AI agents.
@@ -111,6 +115,7 @@ Peke loads environment variables and `.env` for local development. GUI settings 
 | `REA_COMMAND` | unset | Installed REA CLI executable, usually `rea` |
 | `REA_CDP_ENDPOINT` | `http://127.0.0.1:9222` | Loopback Chrome DevTools endpoint used by REA browser analysis |
 | `FETCH_TIMEOUT` | `30` | Fetch timeout in seconds |
+| `SEARXNG_URL` | unset | SearXNG instance for `peke ask` (local ports auto-detected) |
 
 See [docs/profiles.md](docs/profiles.md), [docs/schemas.md](docs/schemas.md), [docs/models.md](docs/models.md), and [docs/architecture.md](docs/architecture.md) for details.
 
@@ -143,7 +148,7 @@ Use Peke only for systems and data you are authorized to access. Respect `robots
 
 ## Contributing and license
 
-See [CONTRIBUTING.md](CONTRIBUTING.md), [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md), and [SECURITY.md](SECURITY.md). Peke is distributed under the MIT License; see [LICENSE](LICENSE). Third-party components retain their own licenses; see [docs/third-party-notices.md](docs/third-party-notices.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md), [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md), and [SECURITY.md](SECURITY.md). Peke is distributed under the Apache License 2.0; see [LICENSE](LICENSE). Third-party components retain their own licenses; see [docs/third-party-notices.md](docs/third-party-notices.md).
 
 
 ## First-run setup

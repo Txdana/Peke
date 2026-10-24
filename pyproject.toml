@@ -20,9 +20,9 @@ dependencies = [
     "scrapling[fetchers]",
     "llama-cpp-python",
     "pydantic>=2",
-    "pyyaml",
+    "pyyaml==6.0.3",
     "python-dotenv",
-    "typer",
+    "typer==0.27.3",
     "rich",
     "platformdirs",
     "mcp>=2.3,<3",
@@ -31,7 +31,25 @@ dependencies = [
     "keyring",
     "httpx",
     "tomli_w",
+    "tomli>=2.0; python_version < '3.11'",
     "packaging",
+    # Bundled SearXNG upstream runtime requirements (kept in sync with
+    # licenses/SEARXNG-REQUIREMENTS.txt for the Windows local service).
+    "certifi==2026.10.19",
+    "babel==2.18.0",
+    "flask-babel==4.0.0",
+    "flask==3.1.3",
+    "jinja2==3.1.6",
+    "lxml==6.1.3",
+    "pygments==2.21.0",
+    "python-dateutil==2.9.0.post0",
+    "curl_cffi==0.16.3",
+    "valkey==6.1.1",
+    "markdown-it-py==4.2.0",
+    "msgspec==0.22.0",
+    "isodate==0.7.2",
+    "whitenoise==6.12.0",
+    "typing-extensions==4.16.0",
 ]
 
 [project.optional-dependencies]
@@ -44,8 +62,12 @@ security = ["bandit[toml]", "pip-audit"]
 peke = "peke.cli:app"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/peke"]
-include = ["src/peke/gui/theme.qss", "src/peke/gui/assets/*.svg", "src/peke/gui/assets/**/*"]
+packages = ["src/peke", "src/searx"]
+include = ["src/peke/**", "src/searx/**"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"licenses/SEARXNG-LICENSE" = "searx/SEARXNG-LICENSE"
+"licenses/SEARXNG-REQUIREMENTS.txt" = "searx/SEARXNG-REQUIREMENTS.txt"
 
 [tool.ruff]
 line-length = 100
@@ -82,4 +104,7 @@ include = [
   "/SECURITY.md",
   "/install.sh",
   "/install.ps1",
+  "/src/searx",
+  "/licenses",
+  "/vendor/searxng-master-source-archive.zip",
 ]

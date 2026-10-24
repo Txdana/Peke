@@ -19,6 +19,8 @@ def test_install_scripts_verify_release_artifact_before_install() -> None:
     assert "Set-StrictMode" in powershell
     assert "$DryRun" in powershell
     assert "$Uninstall" in powershell
+    assert "$FromSource" in powershell
+    assert "pipx install --force --editable '.[gui]'" in powershell
     assert "SHA256SUMS" in powershell
     assert "requirements-hashed.txt" in powershell
     assert "Get-FileHash -Algorithm SHA256" in powershell

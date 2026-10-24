@@ -1,14 +1,30 @@
 """Main three-pane Peke workbench window."""
 import time
+from importlib.resources import files
+from urllib.parse import urljoin, urlparse
 
 from PySide6.QtCore import QSettings, Qt, QThread
-from PySide6.QtWidgets import QHBoxLayout, QMainWindow, QMessageBox, QSplitter, QToolBar, QWidget
+from PySide6.QtWidgets import (
+    QDialog,
+    QDialogButtonBox,
+    QHBoxLayout,
+    QMainWindow,
+    QMessageBox,
+    QPlainTextEdit,
+    QSplitter,
+    QToolBar,
+    QVBoxLayout,
+    QWidget,
+)
 
 from peke.config import load_settings
 from peke.extract import Extractor
+from peke.gui import theme
+from peke.gui.events import ui_event
 from peke.gui.panes.output_panel import OutputPanel
-from peke.gui.panes.sidebar import Sidebar
+from peke.gui.panes.sidebar import NAV_ITEMS, Sidebar
 from peke.gui.panes.workspace import Workspace
+from peke.gui.widgets.icons import svg_icon
 from peke.gui.worker import PipelineWorker
 
 
@@ -80,32 +96,55 @@ class MainWindow(QMainWindow):
         dialog.setText(
             f"<h2>Peke {__version__}</h2>"
             "<p>Open-source local-first data extraction workbench.</p>"
-            "<p>License: <a href='https://opensource.org/license/mit'>MIT</a>. "
+            "<p>License: <a href='https://www.apache.org/licenses/LICENSE-2.0'>Apache-2.0</a>. "
             "See <a href='https://github.com/Scrapling/Scrapling'>Scrapling</a>, "
             "<a href='https://github.com/ggml-org/llama.cpp'>llama.cpp</a>, "
             "<a href='https://doc.qt.io/qtforpython-6/'>PySide6</a>, and "
             "<a href='https://docs.pydantic.dev/'>Pydantic</a> for upstream documentation. "
-            "Third-party license details are listed in docs/third-party-notices.md.</p>"
+            "Use the Third-party notices button for the licenses bundled with this installation.</p>"
         )
         dialog.setStandardButtons(QMessageBox.StandardButton.Ok)
+        notices_button = dialog.addButton("Third-party notices", QMessageBox.ButtonRole.ActionRole)
+        dialog.exec()
+        if dialog.clickedButton() == notices_button:
+            self._show_third_party_notices()
+
+    def _show_third_party_notices(self) -> None:
+        """Display packaged attribution and licensing information even when offline."""
+        try:
+            notices = files("peke").joinpath("THIRD_PARTY_NOTICES.md").read_text(encoding="utf-8")
+        except (OSError, ModuleNotFoundError) as exc:
+            QMessageBox.warning(self, "Third-party notices", f"Could not load bundled notices: {exc}")
+            return
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Peke · Third-party notices")
+        dialog.resize(760, 620)
+        layout = QVBoxLayout(dialog)
+        content = QPlainTextEdit(dialog)
+        content.setReadOnly(True)
+        content.setPlainText(notices)
+        layout.addWidget(content)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close, parent=dialog)
+        buttons.rejected.connect(dialog.reject)
+        buttons.accepted.connect(dialog.accept)
+        layout.addWidget(buttons)
         dialog.exec()
 
     def _select_page(self, index: int) -> None:
+        if not 0 <= index < self.workspace.count():
+            return
         self.workspace.setCurrentIndex(index)
         for idx, button in enumerate(self.sidebar.buttons):
             button.setChecked(idx == index)
-            if self.sidebar.collapsed:
-                from peke.gui import theme
-                from peke.gui.widgets.icons import svg_icon
-                icons = ["target", "scraper", "model", "schema", "target"]
-                icon_name = icons[idx] if idx < len(icons) else "target"
-                button.setIcon(svg_icon(icon_name, theme.TERRACOTTA if idx == index else theme.MUTED_TEXT))
+            icon_name = NAV_ITEMS[idx][1] if idx < len(NAV_ITEMS) else "target"
+            button.setIcon(svg_icon(icon_name, theme.TERRACOTTA if idx == index else theme.MUTED_TEXT))
 
     def start_pipeline(self, url: str, fetcher: str) -> None:
-        from urllib.parse import urlparse
         parsed = urlparse(url)
         if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-            self.workspace.target_page.console.append_event(type("UiEvent", (), {"ts":"", "tag":"INVALID URL", "level":"error", "message":"Enter a valid http:// or https:// URL."})())
+            self.workspace.target_page.console.append_event(
+                ui_event("INVALID URL", "error", "Enter a valid http:// or https:// URL.")
+            )
             return
         if self._thread is not None:
             return
@@ -113,7 +152,9 @@ class MainWindow(QMainWindow):
         delay = load_settings().request_delay_seconds
         if self._last_run_at and now - self._last_run_at < delay:
             page = self.workspace.target_page
-            page.console.append_event(type("UiEvent", (), {"ts":"", "tag":"RATE LIMIT", "level":"warn", "message":f"Please wait {delay - (now - self._last_run_at):.1f}s before starting another run."})())
+            page.console.append_event(
+                ui_event("RATE LIMIT", "warn", f"Please wait {delay - (now - self._last_run_at):.1f}s before starting another run.")
+            )
             return
         self._last_run_at = now
         if load_settings().model_path is None:
@@ -124,14 +165,14 @@ class MainWindow(QMainWindow):
             choice.addButton("Continue without model", QMessageBox.ButtonRole.RejectRole)
             choice.exec()
             if choice.clickedButton() == choose_button:
-                self.workspace.setCurrentIndex(2)
-                self.workspace.model_page.choose_model()
+                self.workspace.setCurrentWidget(self.workspace.providers_page)
+                self.workspace.providers_page.choose_model()
                 return
         page = self.workspace.target_page
         page.run_button.setEnabled(False)
         page.run_button.setText("Running…")
         page.cancel_button.show()
-        page.console.append_event(type("UiEvent", (), {"ts":"", "tag":"START", "level":"info", "message":f"Starting pipeline for {url}"})())
+        page.console.append_event(ui_event("START", "info", f"Starting pipeline for {url}"))
         self._thread = QThread(self)
         self._worker = PipelineWorker(url, fetcher, extractor=self._extractor)
         self._worker.moveToThread(self._thread)
@@ -147,7 +188,9 @@ class MainWindow(QMainWindow):
     def cancel_pipeline(self) -> None:
         if self._worker is not None:
             self._worker.cancel()
-            self.workspace.target_page.console.append_event(type("UiEvent", (), {"ts":"", "tag":"CANCEL", "level":"warn", "message":"Cancellation requested."})())
+            self.workspace.target_page.console.append_event(
+                ui_event("CANCEL", "warn", "Cancellation requested.")
+            )
 
     def _on_pipeline_event(self, event) -> None:
         page = self.workspace.target_page
@@ -157,15 +200,15 @@ class MainWindow(QMainWindow):
             page.endpoint_tree.set_endpoints(data["endpoints"])
 
     def _use_endpoint(self, hint: dict) -> None:
-        from urllib.parse import urljoin
         page = self.workspace.target_page
         current = page.url_input.text().strip()
         path = str(hint.get("path", "/"))
         page.url_input.setText(urljoin(current, path))
-        from PySide6.QtCore import QSettings
         QSettings("Peke", "PekeWorkbench").setValue("selected_endpoint", hint)
         page.fetcher.setCurrentIndex(1)
-        page.console.append_event(type("UiEvent", (), {"ts":"", "tag":"ENDPOINT", "level":"info", "message":"Endpoint selected; next run will use API mode."})())
+        page.console.append_event(
+            ui_event("ENDPOINT", "info", "Endpoint selected; next run will use API mode.")
+        )
 
     def _pipeline_finished(self, result) -> None:
         if self._worker is not None:
@@ -173,13 +216,15 @@ class MainWindow(QMainWindow):
         self.output_panel.set_result(result)
         if getattr(result, "endpoints", None):
             self.workspace.target_page.endpoint_tree.set_endpoints([hint.model_dump(mode="json") for hint in result.endpoints])
-        self.workspace.target_page.console.append_event(type("UiEvent", (), {"ts":"", "tag":"DONE", "level":"ok", "message":f"Pipeline finished with {len(result.records)} record(s)."})())
+        self.workspace.target_page.console.append_event(
+            ui_event("DONE", "ok", f"Pipeline finished with {len(result.records)} record(s).")
+        )
         self._reset_run_button()
 
     def _pipeline_failed(self, message: str) -> None:
         if self._worker is not None:
             self._extractor = self._worker.extractor
-        self.workspace.target_page.console.append_event(type("UiEvent", (), {"ts":"", "tag":"ERROR", "level":"error", "message":message})())
+        self.workspace.target_page.console.append_event(ui_event("ERROR", "error", message))
         self._reset_run_button()
 
     def _reset_run_button(self) -> None:
@@ -207,12 +252,33 @@ class MainWindow(QMainWindow):
         self.output_panel.setVisible(should_show and requested)
 
     def closeEvent(self, event) -> None:
-        self.settings.setValue("geometry", self.saveGeometry())
+        # A QThread must not outlive the QObject tree that owns it. The network
+        # and Docker workers are synchronous operations, so keep the window alive
+        # until they return instead of destroying a running QThread.
+        search_thread = getattr(self.workspace.search_page, "_thread", None)
+        if search_thread is not None and search_thread.isRunning():
+            QMessageBox.information(
+                self,
+                "Search operation in progress",
+                "A search, research, or local SearXNG operation is still running. "
+                "Wait for it to finish before closing Peke.",
+            )
+            event.ignore()
+            return
         if self._worker is not None:
             self._worker.cancel()
         if self._thread is not None and self._thread.isRunning():
             self._thread.quit()
-            self._thread.wait(5000)
+            if not self._thread.wait(5000):
+                QMessageBox.warning(
+                    self,
+                    "Extraction still running",
+                    "The extraction worker has not exited yet. Peke remains open to avoid "
+                    "destroying an active worker; wait for cancellation to finish and close again.",
+                )
+                event.ignore()
+                return
+        self.settings.setValue("geometry", self.saveGeometry())
         if self._extractor is not None:
             try:
                 model = getattr(self._extractor, "_llm", None)

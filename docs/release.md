@@ -11,8 +11,7 @@ successful CI build is not evidence that a GitHub release has been published.
    a versioned section and add a fresh `[Unreleased]` section.
 3. Review `README.md`, supported Python versions, third-party notices, and
    installer instructions.
-4. Confirm screenshots are real and reviewed before replacing the current
-   screenshot placeholders.
+4. Confirm that any release screenshots are real, reviewed, and contain no placeholder imagery.
 5. Run `pytest -q`, `ruff check .`, `mypy src/peke/banner.py`, `bandit -q -r
    src/peke -ll`, and `pip-audit --strict --skip-editable` in an environment
    with the project's optional tooling installed.
@@ -24,8 +23,8 @@ may not have the build backend, compiler, GUI libraries, or package index access
 needed to reproduce the full build locally.
 
 1. Push the reviewed commit and wait for CI to pass.
-2. Create a tag matching `pyproject.toml`, for example `v0.1.0` for version
-   `0.1.0`, and push it.
+2. Create a tag matching `pyproject.toml`, for example `v0.3.0` for version
+   `0.3.0`, and push it.
 3. The release workflow tests supported Python versions, runs the GUI test job,
    checks installer syntax on Linux/macOS/Windows, builds wheel and sdist,
    validates metadata, smoke-installs the wheel, exports hash-locked runtime
@@ -43,6 +42,11 @@ needed to reproduce the full build locally.
 
 - Test the published installer in a clean, disposable user account on Windows
   and at least one POSIX platform.
+- On Windows x64 with internet access, open **Search & Research**, start the
+  bundled SearXNG process, confirm `http://127.0.0.1:8888/search?q=release&format=json`
+  returns a JSON `results` list, perform a real search, stop the process, and
+  verify the service is no longer listening. Inspect the installed `searx/`
+  resources and AGPL notices in the wheel.
 - Run `peke doctor`, launch the GUI, and verify that the model remains optional
   until LLM fallback is requested.
 - For local inference, use a separately obtained compatible GGUF file; do not

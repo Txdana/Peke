@@ -5,6 +5,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Literal
+from urllib.parse import urljoin, urlsplit
 
 from pydantic import BaseModel
 
@@ -16,7 +17,7 @@ from peke.profile import Profile, redact_url
 from peke.schemas import get_schema
 
 logger = logging.getLogger(__name__)
-Stage = Literal["discover", "fetch", "extract", "validate", "done"]
+Stage = str  # research and subagent events also use this event channel
 Level = Literal["info", "ok", "warn", "error"]
 
 
@@ -44,13 +45,60 @@ class PipelineResult:
 def to_markdown(records: list[BaseModel], schema: type[BaseModel]) -> str:
     if not records:
         return f"# {schema.__name__}\n\nNo records extracted."
-    fields = list(records[0].model_dump().keys())
+    dumped = [record.model_dump() for record in records]  # once per record, not once per cell
+    fields = list(dumped[0].keys())
     lines = [f"# {schema.__name__} extraction", "", "| " + " | ".join(fields) + " |",
              "| " + " | ".join(["---"] * len(fields)) + " |"]
-    for record in records:
-        values = [str(record.model_dump().get(field) if record.model_dump().get(field) is not None else "").replace("|", "\\|").replace("\n", " ") for field in fields]
-        lines.append("| " + " | ".join(values) + " |")
+    for row in dumped:
+        cells = ("" if row.get(f) is None else str(row[f]) for f in fields)
+        lines.append("| " + " | ".join(c.replace("|", "\\|").replace("\n", " ") for c in cells) + " |")
     return "\n".join(lines)
+
+
+def select_path(payload: Any, path: str | None) -> Any:
+    """Follow a dotted item_path through dicts and list indexes; None when it does not resolve."""
+    if not path:
+        return payload
+    for part in path.split("."):
+        if isinstance(payload, dict):
+            payload = payload.get(part)
+        elif isinstance(payload, list) and part.isdigit() and int(part) < len(payload):
+            payload = payload[int(part)]
+        else:
+            return None
+    return payload
+
+
+def validate_all(payload: Any, schema: type[BaseModel]) -> list[BaseModel]:
+    """Validate one object or every object in a list (lists used to yield no records)."""
+    if isinstance(payload, list):
+        return [m for m in (validate_json(item, schema) for item in payload) if m is not None]
+    model = validate_json(payload, schema) if payload is not None else None
+    return [model] if model is not None else []
+
+
+def next_profile(profile: Profile, raw: Any, seen: set[str]) -> Profile | None:
+    """Work out the next page request from the response (next link, page number or offset)."""
+    if isinstance(raw, dict):
+        for key in ("next", "next_page", "nextPage", "next_url"):
+            link = raw.get(key)
+            if isinstance(link, str) and link.strip():
+                target = urljoin(profile.url, link.strip())
+                same = urlsplit(target)[:2] == urlsplit(profile.url)[:2]
+                if same and target not in seen:
+                    return profile.model_copy(update={"url": target, "params": {}})
+                return None
+    params = dict(profile.params)
+    try:
+        if "page" in params:
+            params["page"] = int(params["page"]) + 1
+        elif "offset" in params and "limit" in params:
+            params["offset"] = int(params["offset"]) + int(params["limit"])
+        else:
+            return None
+    except (TypeError, ValueError):
+        return None
+    return profile.model_copy(update={"params": params})
 
 
 class Pipeline:
@@ -80,6 +128,30 @@ class Pipeline:
             except Exception:
                 logger.exception("Pipeline event callback failed")
 
+    def _collect_json(self, profile: Profile, first: FetchResult, schema: type[BaseModel]) -> tuple[list[BaseModel], int]:
+        """Validate JSON directly and follow pagination up to ``profile.max_pages`` (JSON responses only)."""
+        records: list[BaseModel] = []
+        seen = {profile.url}
+        current, fr, pages = profile, first, 0
+        while True:
+            pages += 1
+            batch = validate_all(select_path(fr.json, current.item_path), schema) if fr.json is not None else []
+            records.extend(batch)
+            if not batch or pages >= profile.max_pages or self.cancel_check():
+                break
+            nxt = next_profile(current, fr.json, seen)
+            if nxt is None:
+                break
+            seen.add(nxt.url)
+            self._emit("fetch", "info", f"Fetching page {pages + 1} of up to {profile.max_pages}")
+            try:
+                fr = fetch(nxt, self.settings)
+            except FetchError as exc:
+                self._emit("fetch", "warn", f"Pagination stopped: {exc}")
+                break
+            current = nxt
+        return records, pages
+
     def run(self, profile: Profile) -> PipelineResult:
         self.events = []
         result = PipelineResult()
@@ -101,14 +173,10 @@ class Pipeline:
                 raise ExtractionError("Pipeline cancelled after fetch.")
             self._emit("fetch", "ok", f"Fetched HTTP {fr.status}; {len(fr.text)} characters", f"{fr.status} OK")
             schema = get_schema(profile.schema_name)
-            payload = fr.json
-            if profile.item_path and payload is not None:
-                for part in profile.item_path.split("."):
-                    payload = payload.get(part) if isinstance(payload, dict) else None
-            model = validate_json(payload, schema) if payload is not None else None
-            if model is not None:
-                result.records = [model]
-                self._emit("validate", "ok", "JSON validated directly; LLM skipped", "VALID")
+            records, pages = self._collect_json(profile, fr, schema)
+            if records:
+                result.records = records
+                self._emit("validate", "ok", f"JSON validated directly ({pages} page(s)); LLM skipped", "VALID")
             elif profile.mode == "api":
                 raise ExtractionError("API mode requires a JSON response that validates against the selected schema")
             else:

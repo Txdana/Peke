@@ -126,5 +126,5 @@ def test_fetch_rejects_oversized_response(monkeypatch):
     monkeypatch.setitem(sys.modules, "scrapling.fetchers", fake)
     from peke.fetch import FetchError, fetch
     from peke.profile import load_profile
-    with pytest.raises(FetchError, match="safety limit"):
-        fetch(load_profile({"url": "https://example.com?token=private"}), Settings(None))
+    with pytest.raises(FetchError, match="MAX_RESPONSE_BYTES"):
+        fetch(load_profile({"url": "https://example.com?token=private"}), Settings(None, max_response_bytes=4))

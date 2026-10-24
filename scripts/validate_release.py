@@ -16,7 +16,10 @@ from pathlib import Path
 from typing import NoReturn
 from zipfile import ZipFile
 
-import tomllib
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python 3.10 release tooling
+    import tomli as tomllib
 
 
 def fail(message: str) -> NoReturn:
@@ -66,7 +69,7 @@ def main() -> int:
     parser.add_argument("--root", type=Path, default=Path.cwd(), help="project root")
     parser.add_argument("--dist", type=Path, default=Path("dist"), help="distribution directory, relative to root unless absolute")
     parser.add_argument("--assets", type=Path, default=Path("release-assets"), help="release asset directory, relative to root unless absolute")
-    parser.add_argument("--tag", default="", help="optional release tag such as v0.1.0")
+    parser.add_argument("--tag", default="", help="optional release tag such as v0.3.0")
     args = parser.parse_args()
 
     root = args.root.resolve()
@@ -108,6 +111,11 @@ def main() -> int:
                 "peke/cli.py",
                 "peke/gui/theme.qss",
                 "peke/gui/assets/peke.svg",
+                "peke/THIRD_PARTY_NOTICES.md",
+                "searx/webapp.py",
+                "searx/settings.yml",
+                "searx/SEARXNG-LICENSE",
+                "searx/SEARXNG-REQUIREMENTS.txt",
             }
             missing = sorted(required - names)
             if missing:
@@ -123,6 +131,8 @@ def main() -> int:
             required_suffixes = (
                 "/pyproject.toml", "/README.md", "/LICENSE", "/install.sh",
                 "/install.ps1", "/docs/installers.md", "/tests/test_cli.py",
+                "/src/searx/webapp.py", "/licenses/SEARXNG-LICENSE",
+                "/licenses/SEARXNG-REQUIREMENTS.txt", "/vendor/searxng-master-source-archive.zip",
             )
             for suffix in required_suffixes:
                 if not any(name.endswith(suffix) for name in names):

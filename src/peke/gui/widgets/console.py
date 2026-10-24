@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 )
 
 from peke.gui import theme
+from peke.gui.events import ui_event
 
 
 class ExecutionConsole(QFrame):
@@ -111,4 +112,4 @@ class ExecutionConsole(QFrame):
             try:
                 Path(path).write_text("\n".join(line for _event, line in self._events) + "\n", encoding="utf-8")
             except OSError as exc:
-                self.append_event(type("LogEvent", (), {"level": "error", "message": f"Could not save log: {exc}", "tag": "SAVE"})())
+                self.append_event(ui_event("SAVE", "error", f"Could not save log: {exc}"))

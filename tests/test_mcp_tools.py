@@ -41,7 +41,9 @@ async def test_peke_doctor_tool_call(tmp_path, monkeypatch):
     content_text = res.content[0].text
     payload = json.loads(content_text)
     assert payload["ok"] is True
-    assert payload["data"]["version"] == "0.2.0"
+    from peke import __version__
+
+    assert payload["data"]["version"] == __version__
     assert "tools_count" in payload["data"]
 
 

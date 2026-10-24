@@ -25,7 +25,7 @@ def test_window_constructs(qtbot):
     qtbot.addWidget(window)
     window.show()
     assert window.minimumWidth() == 1100
-    assert window.workspace.count() == 6
+    assert window.workspace.count() == 7
 
 
 def test_sidebar_collapse_toggles(qtbot):

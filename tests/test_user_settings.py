@@ -37,3 +37,27 @@ def test_load_settings_reads_rea_command_from_user_config(tmp_path, monkeypatch)
     assert settings.rea_command == "python fake_rea.py"
     assert settings.rea_cdp_endpoint == "http://127.0.0.1:9333"
     assert settings.n_ctx == 1024
+
+
+def test_settings_file_is_private_and_symlinks_are_refused(tmp_path, monkeypatch):
+    import os
+    import pytest
+
+    path = tmp_path / "config" / "settings.json"
+    monkeypatch.setattr(config, "user_settings_path", lambda: path)
+    config.save_user_settings({"REQUEST_DELAY_SECONDS": 1.5})
+    if os.name != "nt":
+        assert path.stat().st_mode & 0o777 == 0o600
+        assert path.parent.stat().st_mode & 0o777 == 0o700
+
+    external = tmp_path / "external.json"
+    external.write_text('{"sentinel": true}', encoding="utf-8")
+    link = path.parent / "settings-link.json"
+    try:
+        link.symlink_to(external)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlink creation is unavailable on this platform")
+    monkeypatch.setattr(config, "user_settings_path", lambda: link)
+    with pytest.raises(OSError, match="symbolic link"):
+        config.save_user_settings({"secret": "must not follow symlinks"})
+    assert external.read_text(encoding="utf-8") == '{"sentinel": true}'

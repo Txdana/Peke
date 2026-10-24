@@ -39,6 +39,12 @@ class BundleAgent:
         if matches:
             notes.append(f"Regex pattern match found {len(matches)} potential API path(s).")
 
+        call_pattern = re.compile(
+            r"""(?:fetch|axios(?:\.\w+)?|\.(?:get|post)|url\s*:)\s*\(?\s*[`"'](/[A-Za-z0-9_\-./]{2,120})(?:[?`"'])""")
+        for m in set(call_pattern.findall(html_content)):
+            if not any(e.get("path") == m for e in endpoints):
+                endpoints.append({"method": "GET", "path": m, "discovered_by": "bundle_call_literal",
+                                  "confidence": "low", "hidden": False})
         header_patterns = ["authorization", "x-api-key", "x-auth-token", "bearer"]
         for hp in header_patterns:
             if hp in html_content.lower():

@@ -11,7 +11,7 @@ import shlex
 import subprocess
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import urlparse, urlsplit, urlunsplit
 
 import yaml
@@ -211,7 +211,7 @@ def run_rea(target_url: str, settings: Settings, on_event: Callable[[Any], None]
     Peke first lists browser targets, selects an exact URL match, then runs analyze-web-bundle.
     It never launches, navigates, or controls the browser.
     """
-    def emit(message: str, level: str = "warn") -> None:
+    def emit(message: str, level: Literal["info", "ok", "warn", "error"] = "warn") -> None:
         if on_event:
             from datetime import datetime, timezone
 
@@ -256,6 +256,5 @@ def run_rea(target_url: str, settings: Settings, on_event: Callable[[Any], None]
         return []
 
 
-def run_rea_stub(*args: Any, **kwargs: Any) -> None:
-    """Compatibility stub retained for callers from early Phase 1."""
-    raise NotImplementedError("Use run_rea(target_url, settings, on_event) for optional discovery.")
+# Backward-compatible name retained for earlier integrations. New code should use run_rea.
+run_rea_stub = run_rea
