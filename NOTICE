@@ -1,7 +1,16 @@
 Peke
-Copyright 2025-2026 Peke Developers
+Copyright 2025-2026 Txdana and Peke contributors
 
-This product includes software developed at Peke (https://github.com/Txdana/Peke).
-Licensed under the Apache License, Version 2.0 (the "License").
+Peke was originally created by Txdana. The official project repository is:
+https://github.com/Txdana/Peke
 
-This distribution also includes SearXNG source under AGPL-3.0-or-later. See THIRD_PARTY_NOTICES.md and licenses/SEARXNG-LICENSE.
+Unless a file or component states otherwise, Peke project code is distributed
+under the Apache License, Version 2.0. See LICENSE for the license text.
+
+This NOTICE is informational and does not modify the license terms or grant
+permission to imply that an unofficial fork is an official Peke release or is
+endorsed by the project maintainers. The Peke name and logos may be subject to
+separate trademark rights; see TRADEMARKS.md if present.
+
+This distribution also includes SearXNG source under AGPL-3.0-or-later. See
+THIRD_PARTY_NOTICES.md and licenses/SEARXNG-LICENSE for third-party notices.
