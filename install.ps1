@@ -23,10 +23,12 @@ function Assert-ValidPin {
     }
 }
 
-function Invoke-Checked([string]$File, [string[]]$Args) {
-    & $File @Args
+
+function Invoke-Checked([string]$File, [string[]]$Arguments) {
+    & $File @Arguments
+
     if ($LASTEXITCODE -ne 0) {
-        throw "Command failed: '$File $($Args -join ' ')'; exit code $LASTEXITCODE."
+        throw "Command failed: '$File $($Arguments -join ' ')'; exit code $LASTEXITCODE."
     }
 }
 
