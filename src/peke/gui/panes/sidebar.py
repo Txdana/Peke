@@ -1,5 +1,7 @@
 """Collapsible navigation rail for Peke."""
-from PySide6.QtCore import QEasingCurve, QPropertyAnimation, QSize
+import threading
+
+from PySide6.QtCore import QEasingCurve, QObject, QPropertyAnimation, QSize, Signal
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from peke.banner import rea_available
@@ -34,6 +36,10 @@ def check_mcp_active() -> tuple[bool, str]:
     return False, "No AI agent registered and REA CLI missing"
 
 
+class _McpProbe(QObject):
+    done = Signal(bool, str)
+
+
 class Sidebar(QFrame):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -53,10 +59,12 @@ class Sidebar(QFrame):
         head = QHBoxLayout()
         self.brand = QLabel("Peke")
         self.brand.setStyleSheet("font-family:'Fraunces',serif;font-size:23px;font-weight:700")
-        active, tooltip = check_mcp_active()
-        self.chip = QLabel("●  MCP Active" if active else "●  MCP Off")
-        self.chip.setToolTip(tooltip)
-        self.chip.setStyleSheet(f"background:{theme.SAGE if active else theme.MUTED_TEXT};color:white;border-radius:10px;padding:4px 7px;font-size:10px")
+        self.chip = QLabel("●  MCP …")
+        self.chip.setToolTip("Checking agent registration…")
+        self.chip.setStyleSheet(f"background:{theme.MUTED_TEXT};color:white;border-radius:10px;padding:4px 7px;font-size:10px")
+        self._probe = _McpProbe(self)
+        self._probe.done.connect(self._apply_mcp_status)
+        threading.Thread(target=self._probe_mcp, daemon=True).start()
         head.addWidget(self.brand)
         head.addStretch(1)
         head.addWidget(self.chip)
@@ -85,6 +93,18 @@ class Sidebar(QFrame):
         self.collapse_button.setAccessibleName("Collapse sidebar")
         self.collapse_button.clicked.connect(self.toggle_collapsed)
         root.addWidget(self.collapse_button)
+
+    def _probe_mcp(self) -> None:
+        try:
+            active, tooltip = check_mcp_active()
+        except Exception:
+            active, tooltip = False, "MCP status unavailable"
+        self._probe.done.emit(active, tooltip)
+
+    def _apply_mcp_status(self, active: bool, tooltip: str) -> None:
+        self.chip.setText("●  MCP Active" if active else "●  MCP Off")
+        self.chip.setToolTip(tooltip)
+        self.chip.setStyleSheet(f"background:{theme.SAGE if active else theme.MUTED_TEXT};color:white;border-radius:10px;padding:4px 7px;font-size:10px")
 
     def toggle_collapsed(self) -> None:
         self.collapsed = not self.collapsed

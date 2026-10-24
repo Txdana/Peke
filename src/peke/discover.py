@@ -7,6 +7,7 @@ or incompatible installation never prevents profile-based extraction.
 import ipaddress
 import json
 import logging
+import os
 import shlex
 import subprocess
 from collections.abc import Callable
@@ -193,7 +194,9 @@ def _target_match_rank(target_url: str, observed_url: str) -> int:
 
 
 def _run_cli_json(command: list[str], timeout: float) -> Any:
-    completed = subprocess.run(command, capture_output=True, text=True, timeout=timeout, check=False)
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
+    completed = subprocess.run(command, capture_output=True, text=True, timeout=timeout, check=False,
+                               stdin=subprocess.DEVNULL, creationflags=flags, encoding="utf-8", errors="replace")
     if completed.returncode != 0:
         detail = completed.stderr.strip()[-1000:]
         raise RuntimeError(f"REA command exited with status {completed.returncode}. {detail}")
