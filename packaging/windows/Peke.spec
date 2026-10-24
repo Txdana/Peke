@@ -1,6 +1,12 @@
 # PyInstaller spec for the windowed Peke desktop application.
 # Build on Windows x64: pyinstaller packaging/windows/Peke.spec --clean --noconfirm
+from pathlib import Path
 from PyInstaller.utils.hooks import collect_all, collect_submodules
+
+# PyInstaller resolves spec-file-relative script paths relative to the spec directory
+# in some invocation contexts. Anchor every project path to the repository root.
+ROOT = Path(SPECPATH).resolve().parent.parent.parent
+SRC = ROOT / "src"
 
 hiddenimports = []
 datas = []
@@ -16,14 +22,13 @@ for package in ("peke", "searx", "scrapling", "curl_cffi", "babel", "flask_babel
         pass
 hiddenimports += collect_submodules("peke")
 
-icon = "src/peke/gui/assets/peke.ico"
-import os
-if not os.path.isfile(icon):
+icon = SRC / "peke" / "gui" / "assets" / "peke.ico"
+if not icon.is_file():
     icon = None
 
 a = Analysis(
-    ["src/peke/desktop/launcher.py"],
-    pathex=["src"],
+    [str(SRC / "peke" / "desktop" / "launcher.py")],
+    pathex=[str(SRC)],
     binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
@@ -46,6 +51,6 @@ exe = EXE(
     upx=False,
     console=False,
     disable_windowed_traceback=False,
-    icon=icon,
+    icon=str(icon) if icon else None,
 )
 coll = COLLECT(exe, a.binaries, a.datas, strip=False, upx=False, name="Peke")
