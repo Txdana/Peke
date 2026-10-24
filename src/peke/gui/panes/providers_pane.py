@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QFormLayout,
     QFrame,
+    QHBoxLayout,
     QLabel,
     QLineEdit,
     QPushButton,
@@ -19,7 +20,6 @@ from PySide6.QtWidgets import (
 from peke.config import load_settings, save_user_settings
 from peke.gui import theme
 from peke.updates import check_for_updates
-
 
 
 class UpdateCheckWorker(QThread):

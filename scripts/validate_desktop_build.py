@@ -8,6 +8,10 @@ def main() -> int:
     spec = (ROOT / "packaging/windows/Peke.spec").read_text(encoding="utf-8")
     iss = (ROOT / "packaging/windows/Peke.iss").read_text(encoding="utf-8")
     installer = (ROOT / "install.ps1").read_text(encoding="utf-8")
+    assert "resolve().parent.parent\n" in spec and "parent.parent.parent" not in spec, (
+        "Peke.spec lives in <repo>/packaging/windows, so ROOT must be exactly two parents up"
+    )
+    assert (ROOT / "src/peke/desktop/launcher.py").is_file(), "PyInstaller entry script missing"
     assert "console=False" in spec, "PyInstaller must use windowed mode"
     assert "peke.ico" in spec, "PyInstaller must use the application icon"
     assert "PrivilegesRequired=lowest" in iss, "Installer should be per-user by default"

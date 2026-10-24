@@ -1,7 +1,5 @@
 """Tests for standalone llama.cpp runtime discovery and API validation."""
 import json
-from pathlib import Path
-from urllib.error import URLError
 
 import pytest
 

@@ -1,11 +1,9 @@
 """Best-effort, offline-capable host hardware profiling for local inference."""
 from __future__ import annotations
 
-import json
 import os
 import platform
 import re
-import shutil
 import subprocess
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -52,7 +50,7 @@ def _memory() -> tuple[int | None, int | None]:
         return int(vm.total), int(vm.available)
     except (ImportError, OSError, AttributeError):
         pass
-    if sys_platform := platform.system() == "Linux":
+    if platform.system() == "Linux":
         try:
             values = {}
             for line in Path("/proc/meminfo").read_text().splitlines():

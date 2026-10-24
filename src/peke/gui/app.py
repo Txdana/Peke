@@ -4,7 +4,7 @@ import os
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QThread, Signal, Slot, QSettings
+from PySide6.QtCore import QObject, QSettings, QThread, Signal, Slot
 from PySide6.QtGui import QFont, QFontDatabase, QIcon
 from PySide6.QtWidgets import QApplication, QMessageBox
 
