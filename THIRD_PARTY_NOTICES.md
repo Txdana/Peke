@@ -18,7 +18,7 @@ Peke is distributed under the Apache License 2.0. Third-party dependencies and c
 - **License:** BSD-3-Clause / MIT
 - **Repository:** https://github.com/D4V1303/Scrapling
 
-### 3. llama-cpp-python
+### 3. llama-cpp-python (optional legacy compatibility only)
 - **License:** MIT
 - **Repository:** https://github.com/abetlen/llama-cpp-python
 
