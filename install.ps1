@@ -13,6 +13,7 @@ $ErrorActionPreference = "Stop"
 $Repo = "https://github.com/Txdana/Peke.git"
 $PinnedCommit = "8575e2fc6b4d8aa9e1647e5d523373170012aeae"
 $AppName = "Peke"
+$AppVersion = "0.5.0"
 $WorkRoot = Join-Path ([IO.Path]::GetTempPath()) ("peke-source-build-" + [guid]::NewGuid().ToString("N"))
 
 function Assert-ValidPin {
@@ -22,7 +23,7 @@ function Assert-ValidPin {
 }
 function Invoke-Checked([string]$File, [string[]]$Args) {
     & $File @Args
-    if ($LASTEXITCODE -ne 0) { throw "'$File $($Args -join ' ')' failed with exit code $LASTEXITCODE." }
+    if ($LASTEXITCODE -ne 0) { throw "Command failed: '$File $($Args -join ' ')'; exit code $LASTEXITCODE." }
 }
 Write-Host "Peke source-build installer"
 Write-Host "Pinned revision: $PinnedCommit"
@@ -42,6 +43,58 @@ function Find-ToolPath([string]$Name, [string[]]$Candidates = @()) {
     }
     return $null
 }
+function Find-InnoCompiler {
+    # Check PATH first, then common per-machine and per-user install locations.
+    $command = Get-Command "ISCC.exe" -ErrorAction SilentlyContinue
+    if ($command -and $command.Source -and (Test-Path -LiteralPath $command.Source -PathType Leaf)) {
+        return $command.Source
+    }
+
+    $programFiles = [Environment]::GetFolderPath([Environment+SpecialFolder]::ProgramFiles)
+    $programFilesX86 = ${env:ProgramFiles(x86)}
+    $localAppData = $env:LOCALAPPDATA
+    $candidates = @()
+    foreach ($base in @($programFilesX86, $programFiles)) {
+        if ($base) { $candidates += (Join-Path $base "Inno Setup 6\ISCC.exe") }
+    }
+    if ($localAppData) {
+        $candidates += (Join-Path $localAppData "Programs\Inno Setup 6\ISCC.exe")
+        $candidates += (Join-Path $localAppData "Programs (x86)\Inno Setup 6\ISCC.exe")
+    }
+
+    # Winget packages and custom installation directories may be recorded here.
+    $registryKeys = @(
+        "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*",
+        "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*",
+        "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*"
+    )
+    foreach ($key in $registryKeys) {
+        $entries = Get-ItemProperty -Path $key -ErrorAction SilentlyContinue
+        foreach ($entry in $entries) {
+            if ($entry.DisplayName -like "Inno Setup 6*") {
+                if ($entry.InstallLocation) {
+                    $candidates += (Join-Path $entry.InstallLocation "ISCC.exe")
+                }
+                if ($entry.DisplayIcon) {
+                    $iconPath = ([string]$entry.DisplayIcon -replace ',\s*-?\d+\s*$', '').Trim('"')
+                    if ((Split-Path -Leaf $iconPath) -ieq "ISCC.exe") {
+                        $candidates += $iconPath
+                    } elseif ($iconPath -and (Test-Path -LiteralPath $iconPath -PathType Leaf)) {
+                        $candidates += (Join-Path (Split-Path -Parent $iconPath) "ISCC.exe")
+                    }
+                }
+            }
+        }
+    }
+
+    foreach ($candidate in ($candidates | Where-Object { $_ } | Select-Object -Unique)) {
+        if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+            return (Resolve-Path -LiteralPath $candidate).Path
+        }
+    }
+    return $null
+}
+
 function Install-WingetPackage([string]$Id) {
     $winget = Get-Command winget.exe -ErrorAction SilentlyContinue
     if (-not $winget) { throw "winget is unavailable. Install App Installer from Microsoft Store, then rerun this command." }
@@ -52,7 +105,7 @@ function Install-WingetPackage([string]$Id) {
 
 $git = Find-ToolPath "git.exe" @((Join-Path $env:ProgramFiles "Git\cmd\git.exe"), (Join-Path ${env:ProgramFiles(x86)} "Git\cmd\git.exe"))
 $python = Find-ToolPath "python.exe" @((Join-Path $env:LOCALAPPDATA "Programs\Python\Python311\python.exe"), (Join-Path $env:ProgramFiles "Python311\python.exe"))
-$iscc = Find-ToolPath "ISCC.exe" @((Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"), (Join-Path $env:ProgramFiles "Inno Setup 6\ISCC.exe"))
+$iscc = Find-InnoCompiler
 if (-not $NoBootstrap) {
     if (-not $git) { Install-WingetPackage "Git.Git" }
     if (-not $python) { Install-WingetPackage "Python.Python.3.11" }
@@ -60,13 +113,16 @@ if (-not $NoBootstrap) {
     # winget installers may not refresh this PowerShell process' PATH. Probe standard locations again.
     $git = Find-ToolPath "git.exe" @((Join-Path $env:ProgramFiles "Git\cmd\git.exe"), (Join-Path ${env:ProgramFiles(x86)} "Git\cmd\git.exe"))
     $python = Find-ToolPath "python.exe" @((Join-Path $env:LOCALAPPDATA "Programs\Python\Python311\python.exe"), (Join-Path $env:ProgramFiles "Python311\python.exe"))
-    $iscc = Find-ToolPath "ISCC.exe" @((Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"), (Join-Path $env:ProgramFiles "Inno Setup 6\ISCC.exe"))
+    $iscc = Find-InnoCompiler
 }
 if (-not $git) { throw "Git for Windows was not found after prerequisite setup. Install Git and retry." }
 if (-not $python) { throw "Python 3.11 x64 was not found after prerequisite setup. Install Python 3.11 x64 and retry." }
-if (-not $iscc) { throw "Inno Setup 6 compiler (ISCC.exe) was not found after prerequisite setup. Install Inno Setup 6 and retry." }
+if (-not $iscc) { throw "Inno Setup was installed or requested, but ISCC.exe could not be located. Check the Inno Setup install folder, or rerun with -NoBootstrap after installing Inno Setup 6 manually." }
+Write-Host "Using Inno Setup compiler: $iscc"
 $pythonVersion = & $python --version 2>&1
-if ($pythonVersion -notmatch '^Python 3\.(11|12)\.') { throw "Python 3.11 or later is required; found '$pythonVersion'." }
+if ($pythonVersion -notmatch '^Python 3\.(11|12)\.') { throw "Python 3.11 or 3.12 x64 is required; found '$pythonVersion'. Install a supported 64-bit Python and retry." }
+$pythonArch = & $python -c "import struct; print(struct.calcsize('P') * 8)" 2>&1
+if ($LASTEXITCODE -ne 0 -or "$pythonArch".Trim() -ne "64") { throw "A 64-bit Python installation is required; detected architecture: '$pythonArch'." }
 New-Item -ItemType Directory -Path $WorkRoot | Out-Null
 try {
     $source = Join-Path $WorkRoot "source"
@@ -87,11 +143,11 @@ try {
     $exe = Join-Path $source "dist\Peke\Peke.exe"
     if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) { throw "PyInstaller did not produce dist\Peke\Peke.exe." }
 
-    Invoke-Checked $iscc @("/DAppVersion=0.3.0", (Join-Path $source "packaging\windows\Peke.iss"))
-    $setup = Join-Path $source "dist-installer\Peke-Setup-0.3.0-x64.exe"
+    Invoke-Checked $iscc @("/DAppVersion=$AppVersion", (Join-Path $source "packaging\windows\Peke.iss"))
+    $setup = Join-Path $source "dist-installer\Peke-Setup-$AppVersion-x64.exe"
     if (-not (Test-Path -LiteralPath $setup -PathType Leaf)) { throw "Inno Setup did not produce the expected setup executable." }
     if ($NoLaunch) {
-        $savedSetup = Join-Path (Get-Location).Path "Peke-Setup-0.3.0-x64.exe"
+        $savedSetup = Join-Path (Get-Location).Path "Peke-Setup-$AppVersion-x64.exe"
         Copy-Item -LiteralPath $setup -Destination $savedSetup -Force
         Write-Host "Build complete: $savedSetup"
         return
