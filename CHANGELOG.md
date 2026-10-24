@@ -4,6 +4,10 @@ All notable changes to Peke are documented here. This format follows [Keep a Cha
 
 ## Unreleased
 
+- Hardened the Windows source-build installer: fixed PowerShell native argument passing, improved Python/Git/Inno Setup discovery, checked command exit codes, verified the exact pinned commit, derived the installer version from `pyproject.toml`, and quoted custom install paths.
+- Made PyInstaller fail fast when collection of required runtime packages fails instead of silently building a potentially incomplete GUI bundle.
+- Updated Windows packaging checks and documentation to use the package version consistently.
+
 - Bundled the SearXNG source and runtime dependencies for a private loopback-only local service on Windows x64; Docker is no longer required. Added a managed process lifecycle, JSON API readiness checks, per-user secret/settings, and AGPL source/licence notices.
 - Hardened search URL/configuration validation, bounded pagination, skipped malformed result URLs, added regression tests, and patched SearXNG’s optional Valkey diagnostic import for native Windows compatibility.
 - Corrected package/application version drift and aligned license statements with Apache-2.0.

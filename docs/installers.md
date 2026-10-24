@@ -38,11 +38,11 @@ Source mode is intended for development and may resolve dependencies from the co
 Build on Windows x64 with Python 3.12 and Inno Setup 6:
 
 ```powershell
-python -m pip install -e ".[gui]" pyinstaller
+python -m pip install -e ".[gui]" pyinstaller==6.16.0
 pyinstaller packaging/windows/Peke.spec --clean --noconfirm
 & "$env:ProgramFiles(x86)\Inno Setup 6\ISCC.exe" packaging/windows/Peke.iss
 ```
 
-The output is `dist/Peke/` plus `dist-installer/Peke-Setup-<version>-x64.exe`. PyInstaller cannot produce a native Windows executable when run on Linux/macOS. Test on a clean Windows VM without Python installed, including model selection, app restart, shortcuts, uninstall, and first-run experience.
+The output is `dist/Peke/` plus `dist-installer/Peke-Setup-<version>-x64.exe`, with the version read from package metadata. PyInstaller cannot produce a native Windows executable when run on Linux/macOS. Test on a clean Windows VM without Python installed, including model selection, app restart, shortcuts, uninstall, and first-run experience.
 
 Windows CI compiles the installer recipe on a Windows runner to validate packaging. This does not require committing or publishing the generated setup EXE. Build artifacts are not proof of successful GUI behavior; do a clean-machine launch test before any public release.

@@ -19,13 +19,17 @@ def test_install_scripts_verify_source_revision_and_build_locally() -> None:
     assert "Set-StrictMode" in powershell
     assert "$DryRun" in powershell
     assert "$PinnedCommit" in powershell
-    assert "rev-parse HEAD" in powershell
+    assert "rev-parse" in powershell and "'HEAD'" in powershell
     assert "Source revision verification failed" in powershell
     assert "winget" in powershell
     assert "PyInstaller" in powershell
-    assert "Peke-Setup-0.3.0-x64.exe" in powershell
+    assert 'Peke-Setup-$AppVersion-x64.exe' in powershell
+    assert "Invoke-Checked -File $git -Arguments @(" in powershell
+    assert "Invoke-Checked $git @(" not in powershell
+    assert "Invoke-Checked -File $buildPython -Arguments @(" in powershell
+    assert "Get-ItemProperty" in powershell
     assert "Start-Process -FilePath $installedExe" in powershell
-    assert "no installer binary is hosted in the repository" in powershell
+    assert "No installer binary is hosted in the repository" in powershell
 
 
 def test_posix_installer_syntax_and_dry_run() -> None:

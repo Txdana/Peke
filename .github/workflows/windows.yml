@@ -51,6 +51,7 @@ jobs:
           choco install innosetup --no-progress -y
           $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
           if (!(Test-Path $iscc)) { throw "Inno Setup compiler missing after installation" }
-          & $iscc /DAppVersion=0.3.0 /Qp packaging/windows/Peke.iss
+          $version = (python -c "from peke import __version__; print(__version__)").Trim()
+          & $iscc "/DAppVersion=$version" /Qp packaging/windows/Peke.iss
           if ($LASTEXITCODE -ne 0) { throw "Inno Setup compilation failed" }
-          if (!(Test-Path "dist-installer/Peke-Setup-0.3.0-x64.exe")) { throw "Installer output missing" }
+          if (!(Test-Path "dist-installer/Peke-Setup-$version-x64.exe")) { throw "Installer output missing" }

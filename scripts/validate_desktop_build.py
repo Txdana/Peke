@@ -14,9 +14,14 @@ def main() -> int:
     assert "{autoprograms}\\Peke" in iss, "Start menu shortcut is missing"
     assert "Tasks: desktopicon" in iss, "Optional desktop shortcut is missing"
     assert "UninstallDisplayIcon" in iss, "Uninstaller registration is missing"
-    assert "rev-parse HEAD" in installer, "Installer must verify the checked-out commit"
+    assert "rev-parse" in installer and "'HEAD'" in installer, "Installer must verify the checked-out commit"
     assert "PinnedCommit" in installer, "Installer must pin a source revision"
-    assert '"fetch", "--depth", "1", "origin", $PinnedCommit' in installer, "Installer should fetch the pinned revision only"
+    assert "'fetch', '--depth', '1', 'origin', $PinnedCommit" in installer, "Installer should fetch the pinned revision only"
+    assert "Invoke-Checked -File $git -Arguments @(" in installer, "Git calls must pass arguments explicitly"
+    assert "Invoke-Checked $git @(" not in installer, "Legacy positional array calls can lose arguments in PowerShell"
+    assert "pyproject.toml" in installer, "Installer version should come from pinned source metadata"
+    assert "Start-Process -FilePath $setup -ArgumentList $installArguments" in installer
+    assert "'/DIR=\"" in installer and "$InstallRoot + '\"'" in installer, "Custom install paths must be quoted for Inno Setup"
     return 0
 
 

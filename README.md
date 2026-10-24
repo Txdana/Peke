@@ -32,7 +32,7 @@ If Git for Windows, Python 3.11/3.12 x64, or Inno Setup 6 is missing, the script
 
 **Release pin required:** `install.ps1` must contain a full 40-character SHA for a reviewed source commit. A real install refuses to run if the pin is missing or invalid; it never builds from the moving `main` branch. Since the one-line command fetches the script from `main`, maintainers should first commit the desktop changes, then commit the installer with its pin set to that reviewed source commit. Do not replace the pin with a branch name or short hash.
 
-For a dry run, run a downloaded local copy with `-DryRun`; it reports the plan without installing prerequisites or changing the system. For development, `-NoLaunch` builds the setup executable and saves it as `Peke-Setup-0.3.0-x64.exe` in the current directory without installing it. `-NoBootstrap` disables automatic prerequisite installation and is intended for CI or controlled developer environments.
+For a dry run, run a downloaded local copy with `-DryRun`; it reports the plan without installing prerequisites or changing the system. For development, `-NoLaunch` builds the setup executable and saves it as `Peke-Setup-<version>-x64.exe` in the current directory without installing it. The version is read from the pinned source `pyproject.toml`. `-NoBootstrap` disables automatic prerequisite installation and is intended for CI or controlled developer environments.
 
 ### Developer source setup
 
@@ -131,10 +131,11 @@ On Windows x64 with Python 3.11 or 3.12 and Inno Setup 6 available, build the GU
 ```powershell
 python -m pip install -e ".[gui]" pyinstaller==6.16.0
 python -m PyInstaller packaging/windows/Peke.spec --clean --noconfirm
-& "$env:ProgramFiles(x86)\Inno Setup 6\ISCC.exe" /DAppVersion=0.3.0 packaging/windows/Peke.iss
+$version = (python -c "from peke import __version__; print(__version__)").Trim()
+& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$version" packaging/windows/Peke.iss
 ```
 
-PyInstaller uses `console=False` and the application icon. The output directory is `dist/Peke/`; the setup executable is written to `dist-installer/`. These are generated build outputs and must not be committed. The one-line consumer installer compiles the same Inno Setup script and runs the generated setup automatically.
+PyInstaller uses `console=False` and the application icon. The output directory is `dist/Peke/`; the setup executable is written to `dist-installer/` as `Peke-Setup-<version>-x64.exe`, using the package version. These are generated build outputs and must not be committed. The one-line consumer installer compiles the same Inno Setup script and runs the generated setup automatically.
 
 ## Tests and release process
 
