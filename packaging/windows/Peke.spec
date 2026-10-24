@@ -5,7 +5,7 @@ from PyInstaller.utils.hooks import collect_all, collect_submodules
 
 # PyInstaller resolves spec-file-relative script paths relative to the spec directory
 # in some invocation contexts. Anchor every project path to the repository root.
-ROOT = Path(SPECPATH).resolve().parent.parent.parent
+ROOT = Path(SPECPATH).resolve().parent.parent
 SRC = ROOT / "src"
 
 hiddenimports = []
