@@ -165,8 +165,11 @@ class ProvidersPane(QWidget):
         self.model_status.setText(f"Saved main provider setting: {kind}")
 
     def _check_updates(self) -> None:
+        existing = getattr(self, "update_worker", None)
+        if existing is not None and existing.isRunning():
+            return  # replacing a running QThread would destroy it mid-run and crash
         self.update_status_label.setText("Checking GitHub Releases...")
-        self.update_worker = UpdateCheckWorker()
+        self.update_worker = UpdateCheckWorker(self)
         self.update_worker.result_ready.connect(self._on_update_result)
         self.update_worker.start()
 

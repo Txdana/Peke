@@ -129,7 +129,7 @@ The GUI uses PySide6. Tests should not require downloading model weights. Use te
 On Windows x64 with Python 3.11 or 3.12 and Inno Setup 6 available, build the GUI and setup executable from the repository root:
 
 ```powershell
-python -m pip install -e ".[gui]" pyinstaller==6.16.0
+python -m pip install -e ".[gui]" pyinstaller==6.22.3
 python -m PyInstaller packaging/windows/Peke.spec --clean --noconfirm
 $version = (python -c "from peke import __version__; print(__version__)").Trim()
 & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$version" packaging/windows/Peke.iss

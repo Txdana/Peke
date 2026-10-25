@@ -11,15 +11,17 @@ SRC = ROOT / "src"
 hiddenimports = []
 datas = []
 binaries = []
-for package in ("peke", "searx", "scrapling", "curl_cffi", "babel", "flask_babel"):
+# Packages the frozen app cannot run without. A silent failure here produces a bundle that
+# builds fine but misses theme.qss / assets / searx templates at runtime.
+REQUIRED = {"peke", "searx", "scrapling", "curl_cffi", "babel", "flask_babel"}
+for package in sorted(REQUIRED):
     try:
         pkg_datas, pkg_binaries, pkg_hidden = collect_all(package)
-        datas += pkg_datas
-        binaries += pkg_binaries
-        hiddenimports += pkg_hidden
-    except Exception:
-        # Optional upstream integrations may not be importable in every packaging profile.
-        pass
+    except Exception as exc:
+        raise SystemExit(f"PyInstaller collection failed for required package {package!r}: {exc}") from exc
+    datas += pkg_datas
+    binaries += pkg_binaries
+    hiddenimports += pkg_hidden
 hiddenimports += collect_submodules("peke")
 
 icon = SRC / "peke" / "gui" / "assets" / "peke.ico"

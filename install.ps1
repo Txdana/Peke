@@ -442,7 +442,7 @@ try {
     ) -WorkingDirectory $source
 
     Invoke-Checked -File $buildPython -Arguments @(
-        '-m', 'pip', 'install', '.[gui]', 'pyinstaller==6.16.0'
+        '-m', 'pip', 'install', '.[gui]', 'pyinstaller==6.22.3'
     ) -WorkingDirectory $source
 
     Invoke-Checked -File $buildPython -Arguments @(
@@ -491,16 +491,30 @@ try {
 
     # Inno Setup expects /DIR="path" when the install path contains spaces.
     $installDirArgument = '/DIR="' + $InstallRoot + '"'
+    # Stop anything still running from a previous install (the app, its bundled
+    # Node/SearXNG/llama-server helpers). A locked file makes Inno abort with exit code 5.
+    if (Test-Path -LiteralPath $InstallRoot) {
+        $installPrefix = ([System.IO.Path]::GetFullPath($InstallRoot)).TrimEnd('\') + '\'
+        Get-Process -ErrorAction SilentlyContinue |
+            Where-Object { $_.Path -and $_.Path.StartsWith($installPrefix, [System.StringComparison]::OrdinalIgnoreCase) } |
+            Stop-Process -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 1
+    }
+
+    $setupLog = Join-Path ([System.IO.Path]::GetTempPath()) 'peke-setup.log'
     $installArguments = @(
         '/VERYSILENT',
         '/SUPPRESSMSGBOXES',
         '/NORESTART',
+        ('/LOG="' + $setupLog + '"'),
         $installDirArgument
     )
 
     $installerProcess = Start-Process -FilePath $setup -ArgumentList $installArguments -Wait -PassThru
     if ($installerProcess.ExitCode -ne 0) {
-        throw "Peke Setup exited with code $($installerProcess.ExitCode)."
+        $keptLog = Join-Path (Get-Location).Path 'peke-setup.log'
+        if (Test-Path -LiteralPath $setupLog) { Copy-Item -LiteralPath $setupLog -Destination $keptLog -Force }
+        throw "Peke Setup exited with code $($installerProcess.ExitCode). Setup log saved to: $keptLog"
     }
 
     $installedExe = Join-Path $InstallRoot 'Peke.exe'

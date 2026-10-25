@@ -32,6 +32,7 @@ def load_stylesheet() -> str:
         "@CONSOLE_TIMESTAMP": CONSOLE_TIMESTAMP, "@CONSOLE_HIGHLIGHT": CONSOLE_HIGHLIGHT, "@JSON_NUMBER": JSON_NUMBER, "@TERRACOTTA_TEXT": TERRACOTTA_TEXT, "@CONSOLE_MUTED_TEXT": CONSOLE_MUTED_TEXT,
         "@WHITE": WHITE,
     }
-    for token, color in palette.items():
+    # Longest token first, so "@TERRACOTTA" cannot clobber "@TERRACOTTA_TEXT".
+    for token, color in sorted(palette.items(), key=lambda item: len(item[0]), reverse=True):
         source = source.replace(token, color)
     return source
