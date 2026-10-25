@@ -38,7 +38,7 @@ Source mode is intended for development and may resolve dependencies from the co
 Build on Windows x64 with Python 3.12 and Inno Setup 6:
 
 ```powershell
-python -m pip install -e ".[gui]" pyinstaller==6.16.0
+python -m pip install -e ".[gui]" pyinstaller==6.22.3
 pyinstaller packaging/windows/Peke.spec --clean --noconfirm
 & "$env:ProgramFiles(x86)\Inno Setup 6\ISCC.exe" packaging/windows/Peke.iss
 ```

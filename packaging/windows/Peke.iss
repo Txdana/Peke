@@ -22,6 +22,7 @@ WizardStyle=modern
 ArchitecturesInstallIn64BitMode=x64
 UninstallDisplayIcon={app}\Peke.exe
 CloseApplications=yes
+CloseApplicationsFilter=*.exe,*.dll
 RestartApplications=no
 
 [Languages]

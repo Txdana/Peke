@@ -1,9 +1,11 @@
 """Desktop launcher entry point for Peke (also the frozen executable's single entry)."""
 import faulthandler
+import logging
 import multiprocessing
 import os
 import runpy
 import sys
+import threading
 import traceback
 from pathlib import Path
 
@@ -16,6 +18,9 @@ def _log_dir() -> Path:
     return path
 
 
+_LOG_FILE = None  # keep the log handle alive for faulthandler
+
+
 def _fix_windowed_streams() -> None:
     """A windowed (console=False) PyInstaller build has no stdout/stderr; libraries that
     print or log to them would crash at startup. Point them somewhere harmless."""
@@ -23,6 +28,8 @@ def _fix_windowed_streams() -> None:
         log = open(_log_dir() / "peke-gui.log", "a", encoding="utf-8", buffering=1)  # noqa: SIM115
     except OSError:
         log = open(os.devnull, "w", encoding="utf-8")  # noqa: SIM115
+    global _LOG_FILE
+    _LOG_FILE = log
     if sys.stdout is None:
         sys.stdout = log
     if sys.stderr is None:
@@ -31,6 +38,27 @@ def _fix_windowed_streams() -> None:
         faulthandler.enable(file=log)
     except (RuntimeError, ValueError):
         pass
+    # Without this the log stays empty: nothing configures Python logging in a
+    # windowed build, and uncaught exceptions in Qt slots/threads vanish.
+    logging.basicConfig(
+        stream=log,
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+        force=True,
+    )
+    try:
+        # If the main window is not up after 20 s, dump every thread's stack to the log
+        # so a hang shows exactly where it is stuck. app.StartupBridge cancels this.
+        faulthandler.dump_traceback_later(20, repeat=False, file=log)
+    except (RuntimeError, ValueError):
+        pass
+    logging.getLogger("peke").info("Peke starting (frozen=%s, pid=%s)", getattr(sys, "frozen", False), os.getpid())
+
+    def _log_uncaught(exc_type, exc, tb) -> None:
+        logging.getLogger("peke").critical("Uncaught exception", exc_info=(exc_type, exc, tb))
+
+    sys.excepthook = _log_uncaught
+    threading.excepthook = lambda args: _log_uncaught(args.exc_type, args.exc_value, args.exc_traceback)
 
 
 def _dispatch_frozen_child(argv: list[str]) -> int | None:

@@ -4,6 +4,7 @@ from importlib.resources import files
 from urllib.parse import urljoin, urlparse
 
 from PySide6.QtCore import QSettings, Qt, QThread
+from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
@@ -53,6 +54,7 @@ class MainWindow(QMainWindow):
         geometry = self.settings.value("geometry")
         if geometry:
             self.restoreGeometry(geometry)
+            self._ensure_on_screen()
         self._thread: QThread | None = None
         self._worker: PipelineWorker | None = None
         self._output_visible = True
@@ -81,6 +83,17 @@ class MainWindow(QMainWindow):
         target.run_requested.connect(self.start_pipeline)
         target.endpoint_tree.use_endpoint.connect(self._use_endpoint)
         target.cancel_requested.connect(self.cancel_pipeline)
+
+    def _ensure_on_screen(self) -> None:
+        """A saved position from a monitor that is gone would open the window off-screen."""
+        screens = QGuiApplication.screens()
+        if not screens:
+            return
+        if any(screen.availableGeometry().intersects(self.geometry()) for screen in screens):
+            return
+        available = (QGuiApplication.primaryScreen() or screens[0]).availableGeometry()
+        self.resize(min(1440, available.width()), min(900, available.height()))
+        self.move(available.center() - self.rect().center())
 
     def settings_value(self, key: str, default):
         return QSettings("Peke", "PekeWorkbench").value(key, default, type=bool)

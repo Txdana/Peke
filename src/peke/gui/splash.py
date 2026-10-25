@@ -24,7 +24,10 @@ class SplashScreen(QWidget):
     )
 
     def __init__(self, parent=None, reduced_motion: bool = False) -> None:
-        super().__init__(parent, Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool)
+        super().__init__(
+            parent,
+            Qt.WindowType.SplashScreen | Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint,
+        )
         self.setObjectName("pekeSplash")
         self.setFixedSize(640, 300)
         self.setStyleSheet(f"#pekeSplash {{ background: {theme.CONSOLE_BG}; border-radius: 12px; }}")
@@ -60,6 +63,9 @@ class SplashScreen(QWidget):
         self.dismissed.emit()
         self.close()
         event.accept()
+
+    def mousePressEvent(self, event) -> None:
+        self.keyPressEvent(event)
 
     @staticmethod
     def enabled_by_setting() -> bool:
