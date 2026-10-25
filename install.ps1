@@ -11,7 +11,7 @@ $ErrorActionPreference = 'Stop'
 
 $Repo = 'https://github.com/Txdana/Peke.git'
 # Pin to the reviewed source commit. Never replace this with "main" or a tag.
-$PinnedCommit = '3c22d18c62893d0074b64df8bc90d05281b0d325'
+$PinnedCommit = 'e189a3effa70d659443619c485b709d6d81eb55b'
 $AppName = 'Peke'
 # Keep the build root short: PySide6 ships deeply nested Qt/QML files that can
 # exceed legacy Windows path limits when built below the default TEMP directory.
